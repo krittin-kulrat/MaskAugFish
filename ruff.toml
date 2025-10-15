@@ -1,0 +1,16 @@
+# Allow longer lines (more forgiving)
+line-length = 120
+
+# Show clear, beginner-friendly output
+show-fixes = true
+
+[lint]
+# Focus on essential errors and warnings
+select = ["E", "F", "W"]
+ignore = [
+    "E501",  # line length (let's not enforce)
+    "E203",  # whitespace before ':'
+    "E722",  # bare except (we can allow it for simplicity)
+]
+
+
