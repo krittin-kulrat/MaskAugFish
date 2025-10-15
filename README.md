@@ -1,6 +1,6 @@
 # 🐟 MaskAugFish
 
-This project is part of the final project for CSDS465 Computer Vision course. The project explore the effects of mask-aware data augmentation on CNN-based fish species recognition
+This project is the final project for CSDS465 Computer Vision course. The project explore the effects of mask-aware data augmentation on CNN-based fish species recognition
 
 ---
 
@@ -46,7 +46,7 @@ We use the **[Fish4Knowledge](https://homepages.inf.ed.ac.uk/rbf/Fish4Knowledge/
 
 ### Model
 
-- **Base architecture:** ResNet-50 CNN (pre-trained on ImageNet).  
+- **Base architecture:** ResNet-18 CNN (pre-trained).  
 - **Input size:** 224 × 224.  
 - **Loss function:** Cross-entropy with class-weighting to handle imbalance.  
 - **Optimizer:** ADAM (Tentative)
@@ -60,18 +60,15 @@ We use the **[Fish4Knowledge](https://homepages.inf.ed.ac.uk/rbf/Fish4Knowledge/
 | Background-Only | Background pixels only | Blur, color cast, noise, hue shift |
 | Whole-Image | Entire frame | Standard random crop, color jitter, rotation |
 
-Mask regions are extracted using Fish4Knowledge segmentation masks.
+Mask regions are from Fish4Knowledge segmentation masks. For image augmentation idea, see [this repository](https://github.com/aleju/imgaug).
 
 ---
 
 ## 📊 Evaluation
 
 - **Metrics:** Accuracy, Macro-F1, Balanced Accuracy.  
-- **Visualization:** Confusion matrix, and t-SNE embeddings.  
-- **Analysis:**  
-  - Compare species-specific confusion (especially color-similar fish).  
-  - Test background leakage effects.  
-  - Evaluate model focus via Grad-CAM on fish vs. background regions.
+- **Visualization:** Confusion matrix
+- **Analysis:** Compare species-specific confusion matrix
 
 ---
 
