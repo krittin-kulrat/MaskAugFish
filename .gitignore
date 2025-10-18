@@ -1,1 +1,11 @@
 .vscode/*
+*.png
+!data/fish_image/fish_01/fish_000000009598_05281.png
+!data/fish_image/fish_01/fish_000000009598_05283.png
+!data/fish_image/fish_02/fish_000000249596_03656.png
+!data/fish_image/fish_02/fish_000000249596_03658.png
+!data/mask_image/mask_01/mask_000000009598_05281.png
+!data/mask_image/mask_01/mask_000000009598_05283.png
+!data/mask_image/mask_02/mask_000000249596_03656.png
+!data/mask_image/mask_02/mask_000000249596_03658.png
+*.pyc
