@@ -40,8 +40,9 @@ def generate_channel_switch(prob: float
     return choices, p_choices
 
 
-def addition_transform(value: int,
-                       range: int = 25) -> v2.Lambda:
+def addition_transform(prob: float,
+                       value: int,
+                       range: int = 25) -> v2.RandomChoice:
     """Create an addition transformation
 
     Args:
@@ -49,20 +50,17 @@ def addition_transform(value: int,
         range (int, optional): Range of the random variation. Defaults to 25.
 
     Returns:
-        v2.Lambda: Addition transformation
+        v2.RandomChoice: Addition transformation
     """
-    variation = torch.randint(value - range, value + range + 1, (1,)).item()
-    return v2.Lambda(
+    choices = [v2.Lambda(lambda x: x)]
+    augmented = v2.Lambda(
         lambda x: (
-            x.to(torch.int16) + variation).clamp(0, 255).to(torch.uint8))
-
-
-def region_transform(image: torch.Tensor,
-                     mask: torch.Tensor,
-                     transform: v2.Compose,) -> torch.Tensor:
-    original_image = image.clone()
-    transformed_image = transform(image)
-    return torch.where(mask.bool(), transformed_image, original_image)
+            x.to(torch.int16) + torch.randint(value - range,
+                                              value + range + 1, (1,)
+                                              ).item()
+                                              ).clamp(0, 255).to(torch.uint8))
+    choices.append(augmented)
+    return v2.RandomChoice(choices, [1 - prob, prob])
 
 
 class Augmentation(torch.nn.Module):
@@ -72,20 +70,38 @@ class Augmentation(torch.nn.Module):
                  seed: int = 42
                  ) -> None:
         super().__init__()
+        if regime not in ["fish-only", "background-only",
+                          "whole-image", "none"]:
+            raise ValueError(f"Unknown regime: {regime}")
         self.regime = regime
         with open(config_file, 'r') as f:
             self.augmentation_params = json.load(f)
         self.channel_switch = v2.RandomChoice(*generate_channel_switch(
                                 self.augmentation_params['channel_switch']))
+        self.addition = addition_transform(
+            prob=self.augmentation_params['addition'][0],
+            value=self.augmentation_params['addition'][1],
+            range=25 if len(self.augmentation_params['addition']) < 3 else
+            self.augmentation_params['addition'][2]
+        )
 
-        if self.augmentation_params['addition'] is not False:
-            self.addition = addition_transform(
-                self.augmentation_params['addition'], range=25)
-        else:
-            self.addition = v2.Lambda(lambda x: x)
+    def switch_mask(self, mask: torch.Tensor) -> torch.Tensor:
+        return ((mask + 1) * 255)
 
-    def forward(self, image):
+    def forward(self, image: torch.Tensor,
+                mask: torch.Tensor) -> torch.Tensor:
+        if self.regime == "none":
+            return image
+        original_image = image.clone()
         image = self.channel_switch(image)
-        if self.addition is not None:
-            image = self.addition(image)
-        return image
+        image = self.addition(image)
+        # TODO: add other augmentations here
+        if self.regime == "whole-image":
+            return image
+        elif self.regime == "background-only":
+            mask = self.switch_mask(mask)
+            return torch.where(mask.bool(), original_image, image)
+        elif self.regime == "fish-only":
+            return torch.where(mask.bool(), image, original_image)
+        else:
+            raise ValueError(f"Unknown regime: {self.regime}")
