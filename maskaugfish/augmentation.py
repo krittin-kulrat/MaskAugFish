@@ -10,6 +10,7 @@ Purpose:
 """
 
 from torchvision.transforms import v2
+from torch.nn.functional import dropout
 import torch
 import json
 import itertools
@@ -81,11 +82,58 @@ def gaussian_noise_transform(prob: float,
     return v2.RandomChoice(choices, [1 - prob, prob])
 
 
+def gaussian_blur_transform(prob: float,
+                            kernel_size: int = 3,
+                            sigma: float = 1.0) -> v2.RandomChoice:
+    """Create a Gaussian blur transformation
+
+    Args:
+        prob (float): Probability of applying the transformation
+        kernel_size (int, optional): Size of the Gaussian kernel. Defaults to 3.
+        sigma (float, optional): Standard deviation of the Gaussian kernel. Defaults to 1.0.
+
+    Returns:
+        v2.RandomChoice: Gaussian blur transformation
+    """
+    choices = [v2.Lambda(lambda x: x)]
+    blur_ = v2.GaussianBlur(kernel_size=kernel_size, sigma=sigma)
+    augmented = v2.Lambda(lambda x: blur_(x))
+    choices.append(augmented)
+    return v2.RandomChoice(choices, [1 - prob, prob])
+
+
+def dropout_transform(prob: float,
+                      dropout_prob: float = 0.1) -> v2.RandomChoice:
+    """Create a dropout transformation that preserves uint8 dtype.
+
+    If input is uint8: convert to float (0-1), apply dropout, rescale to uint8.
+    If input is float: apply dropout directly, preserve dtype.
+
+    Args:
+        prob (float): Probability of applying the transformation.
+        dropout_prob (float): Dropout probability.
+
+    Returns:
+        v2.RandomChoice
+    """
+    def _apply(x: torch.Tensor) -> torch.Tensor:
+        if x.dtype == torch.uint8:
+            x_float = x.float() / 255.0
+            x_drop = dropout(x_float, p=dropout_prob, training=True)
+            x_out = (x_drop * 255.0).round().clamp(0, 255).to(torch.uint8)
+            return x_out
+        else:
+            return dropout(x, p=dropout_prob, training=True)
+
+    choices = [v2.Lambda(lambda x: x)]
+    augmented = v2.Lambda(_apply)
+    return v2.RandomChoice(choices + [augmented], [1 - prob, prob])
+
+
 class Augmentation(torch.nn.Module):
 
     def __init__(self, config_file: str,
                  regime: str = "fish-only",
-                 seed: int = 42
                  ) -> None:
         super().__init__()
         if regime not in ["fish-only", "background-only",
@@ -109,7 +157,18 @@ class Augmentation(torch.nn.Module):
             std=1.0 if len(self.augmentation_params['gaussian_noise']) < 3
             else self.augmentation_params['gaussian_noise'][2]
         )
-        # TODO: add other augmentations here
+        self.dropout = dropout_transform(
+            prob=self.augmentation_params['dropout'][0],
+            dropout_prob=0.1 if len(self.augmentation_params['dropout']) < 2
+            else self.augmentation_params['dropout'][1]
+        )
+        self.solarize = v2.RandomSolarize(
+            threshold=self.augmentation_params['solarize'][0],
+            p=self.augmentation_params['solarize'][1]
+        )
+        self.equalize = v2.RandomEqualize(
+            p=self.augmentation_params['equalize']
+        )
 
     def region_transform(self, original_image: torch.Tensor,
                          augmented_image: torch.Tensor,
@@ -129,7 +188,10 @@ class Augmentation(torch.nn.Module):
         if self.regime == "none":
             return image
         original_image = image.clone()
+        image = self.solarize(image)
         image = self.channel_switch(image)
         image = self.addition(image)
-        # TODO: add other augmentations here
+        image = self.gaussian_noise(image)
+        image = self.equalize(image)
+        image = self.dropout(image)
         return self.region_transform(original_image, image, mask)
