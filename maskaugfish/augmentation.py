@@ -162,6 +162,13 @@ class Augmentation(torch.nn.Module):
             dropout_prob=0.1 if len(self.augmentation_params['dropout']) < 2
             else self.augmentation_params['dropout'][1]
         )
+        self.gaussian_blur = gaussian_blur_transform(
+            prob=self.augmentation_params['gaussian_blur'][0],
+            kernel_size=3 if len(self.augmentation_params['gaussian_blur']) < 2
+            else self.augmentation_params['gaussian_blur'][1],
+            sigma=1.0 if len(self.augmentation_params['gaussian_blur']) < 3
+            else self.augmentation_params['gaussian_blur'][2]
+        )
         self.solarize = v2.RandomSolarize(
             threshold=self.augmentation_params['solarize'][0],
             p=self.augmentation_params['solarize'][1]
@@ -193,5 +200,6 @@ class Augmentation(torch.nn.Module):
         image = self.addition(image)
         image = self.gaussian_noise(image)
         image = self.equalize(image)
+        image = self.gaussian_blur(image)
         image = self.dropout(image)
         return self.region_transform(original_image, image, mask)
