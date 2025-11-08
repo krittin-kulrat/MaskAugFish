@@ -1,6 +1,6 @@
 # dataloader.py
 # Fish4Knowledge dataloader with:
-# - torchvision.io.read_image (tensor I/O)
+# - torchvision.io.read_file + decode_image (tensor I/O)
 # - torchvision.transforms.v2-style pipelines
 # - StratifiedShuffleSplit (hold-out test)
 # - StratifiedKFold (train/val CV on remaining pool)
@@ -48,6 +48,7 @@ from torch.utils.data import DataLoader, Dataset, WeightedRandomSampler
 import torchvision.transforms.v2 as v2
 from torchvision.transforms import InterpolationMode
 import torchvision.io as tvio
+from torchvision.io.image import ImageReadMode  # for decode_image mode
 
 from sklearn.model_selection import StratifiedShuffleSplit, StratifiedKFold
 
@@ -171,9 +172,10 @@ class FishDataset(Dataset):
       }
 
     Notes:
-    - We accept an optional `augment` pipeline (v2.Compose or compatible).
-      This is applied BEFORE base resizing/dtype.
-      So typical augment ops like flip/color jitter happen at full resolution.
+    - We accept an optional `augment` pipeline (v2.Compose or callable).
+      If a mask exists, augmentation is applied jointly as (img, mask) -> (img, mask).
+      Otherwise, we call it as augment(img).
+      This runs BEFORE base resizing/dtype.
     """
 
     def __init__(
@@ -193,15 +195,34 @@ class FishDataset(Dataset):
     def __len__(self) -> int:
         return len(self.samples)
 
+    @staticmethod
+    def _read_uint8(path: str, gray: bool = False) -> torch.Tensor:
+        """
+        Load encoded bytes then decode to uint8 tensor [C,H,W].
+        Replaces obsolete tvio.read_image.
+        """
+        data = tvio.read_file(path)
+        mode = ImageReadMode.GRAY if gray else ImageReadMode.RGB
+        return tvio.decode_image(data, mode=mode)  # uint8 [C,H,W]
+
     def __getitem__(self, idx: int):
         img_path, mask_path, label = self.samples[idx]
 
         # --- load RGB image as tensor ---
-        # tvio.read_image returns [C,H,W] uint8 tensor in [0..255]
-        img = tvio.read_image(img_path)  # (3,H,W) uint8
+        img = self._read_uint8(img_path, gray=False)  # (3,H,W) uint8
+
+        # --- optionally load mask (assume path is valid when provided) ---
+        mask_raw = None
+        if mask_path is not None:  # NOTE: removed Path(mask_path).exists() per reviewer
+            mask_raw = self._read_uint8(mask_path, gray=True)  # [1,H,W] uint8
+
         # apply optional augment first (on uint8)
         if self.augment is not None:
-            img = self.augment(img)
+            if mask_raw is not None:
+                img, mask_raw = self.augment(img, mask_raw)   # joint augment
+            else:
+                img = self.augment(img)
+
         # then resize + to float32 [0,1]
         img = self.base_tf_img(img)
 
@@ -211,16 +232,10 @@ class FishDataset(Dataset):
             "path": img_path,
         }
 
-        # --- load mask if exists ---
-        if mask_path is not None and Path(mask_path).exists():
-            # mask might be single-channel or rgb; take first channel after load
-            mask_raw = tvio.read_image(mask_path)  # [C,H,W] uint8
-            if mask_raw.shape[0] > 1:
-                mask_raw = mask_raw[0:1, ...]  # take first channel
-            # resize with NEAREST
-            mask_resized = self.tf_mask(mask_raw)
-            # squeeze channel and cast to long class IDs
-            mask_tensor = mask_resized.squeeze(0).to(torch.long)
+        # resize + cast mask if present
+        if mask_raw is not None:
+            mask_resized = self.tf_mask(mask_raw)           # [1,H,W] uint8
+            mask_tensor = mask_resized.squeeze(0).to(torch.long)  # [H,W] long
             out["mask"] = mask_tensor
 
         return out
@@ -317,7 +332,7 @@ def make_dataloaders(
     train_ds = FishDataset(
         tr_samples,
         img_size=img_size,
-        augment=augment_pipeline,   # augment only on train
+        augment=augment_pipeline,   # augment only on train (joint if mask exists)
     )
     val_ds = FishDataset(
         va_samples,
@@ -419,9 +434,16 @@ if __name__ == "__main__":
     print(f"[CHECK] Overall class frequencies: {freq_all}")
 
     # Build a tiny default augment pipeline for training just to verify code path
-    default_aug = v2.Compose([
-        v2.RandomHorizontalFlip(p=0.5),
-    ])
+    class JointHFlip:
+        def __init__(self, p: float = 0.5): self.p = p
+        def __call__(self, img: torch.Tensor, mask: torch.Tensor = None):
+            if torch.rand(1).item() < self.p:
+                img = torch.flip(img, dims=[2])   # flip width
+                if mask is not None:
+                    mask = torch.flip(mask, dims=[2])
+            return (img, mask) if mask is not None else img
+
+    default_aug = JointHFlip(p=0.5)
 
     train_loader, val_loader, test_loader = make_dataloaders(
         samples=samples,
@@ -450,10 +472,7 @@ if __name__ == "__main__":
     print(f"[OK]  test batch: {tuple(xte.shape)} | labels sample: {yte[:8].tolist()}")
 
     # Repro check:
-    # We show that with same seed, StratifiedShuffleSplit and StratifiedKFold
-    # produce exactly the same indices ordering if we rerun.
     print("[CHECK] Reproducibility check:")
-    # Re-run the split logic quickly:
     y_all_np = np.array(ys_all, dtype=np.int64)
 
     sss_a = StratifiedShuffleSplit(n_splits=1, test_size=args.test_ratio,
