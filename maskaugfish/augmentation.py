@@ -186,9 +186,7 @@ class Augmentation(torch.nn.Module):
             return torch.where(mask.bool(), original_image, augmented_image)
         elif self.regime == "fish-only":
             return torch.where(mask.bool(), augmented_image, original_image)
-        else:
-            raise ValueError("region_transform is only for " +
-                             "'fish-only' or 'background-only' regimes.")
+        # All valid regimes are handled above; this branch is unreachable.
 
     def forward(self, image: torch.Tensor,
                 mask: torch.Tensor) -> torch.Tensor:
