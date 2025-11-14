@@ -40,7 +40,7 @@ def channel_switch_transform(prob: float
 
 def addition_transform(prob: float,
                        value: int,
-                       range: int = 25) -> v2.RandomChoice:
+                       range_val: int = 25) -> v2.RandomChoice:
     """Create an addition transformation
 
     Args:
@@ -54,8 +54,8 @@ def addition_transform(prob: float,
     choices = [v2.Lambda(lambda x: x)]
     augmented = v2.Lambda(
         lambda x: (
-            x.to(torch.int16) + torch.randint(value - range,
-                                              value + range + 1, (1,)
+            x.to(torch.int16) + torch.randint(value - range_val,
+                                              value + range_val + 1, (1,)
                                               ).item()
                                               ).clamp(0, 255).to(torch.uint8))
     choices.append(augmented)
@@ -147,7 +147,7 @@ class Augmentation(torch.nn.Module):
         self.addition = addition_transform(
             prob=self.augmentation_params['addition'][0],
             value=self.augmentation_params['addition'][1],
-            range=25 if len(self.augmentation_params['addition']) < 3 else
+            range_val=25 if len(self.augmentation_params['addition']) < 3 else
             self.augmentation_params['addition'][2]
         )
         self.gaussian_noise = gaussian_noise_transform(
