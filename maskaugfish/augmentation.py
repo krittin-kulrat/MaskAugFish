@@ -184,9 +184,8 @@ class Augmentation(torch.nn.Module):
             return augmented_image
         elif self.regime == "background-only":
             return torch.where(mask.bool(), original_image, augmented_image)
-        elif self.regime == "fish-only":
+        else:  # fish-only
             return torch.where(mask.bool(), augmented_image, original_image)
-        # All valid regimes are handled above; this branch is unreachable.
 
     def forward(self, image: torch.Tensor,
                 mask: torch.Tensor) -> torch.Tensor:
