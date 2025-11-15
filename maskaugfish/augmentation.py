@@ -131,9 +131,40 @@ def dropout_transform(prob: float,
 
 
 class Augmentation(torch.nn.Module):
+    """
+    A configurable augmentation module that constructs a transformation pipeline
+    from a JSON configuration file. The class supports region-aware augmentation,
+    allowing augmentations to be applied selectively to the fish-only region,
+    background-only region, or the entire image based on a provided mask.
 
+    The augmentation pipeline is dynamically built from a list of operations
+    specified under `cfg["pipeline"]` in the configuration file. Each operation
+    references a corresponding augmentation definition in `cfg["augmentation"]`.
+    Augmentations with probability=0.0 are automatically skipped.
+
+    Parameters
+    ----------
+    config_file : str
+        Path to the JSON configuration file defining available augmentations
+        and the sequence of operations.
+    regime : str, optional
+        Controls how the augmented image is blended with the original image.
+        Must be one of:
+        - "whole-image": apply augmentations to the entire image
+        - "fish-only": apply augmentations to foreground (mask=True)
+        - "background-only": apply augmentations to background (mask=False)
+        - "none": disable augmentation entirely
+        Default is "whole-image".
+
+    Notes
+    -----
+    - If all augmentations are disabled or removed (prob=0), the module falls
+      back to an identity transform.
+    - This design enables flexible experimentation with augmentation ordering
+      by editing only the JSON file.
+    """
     def __init__(self, config_file: str,
-                 regime: str = "fish-only",
+                 regime: str = "whole-image",
                  ) -> None:
         super().__init__()
         if regime not in ["fish-only", "background-only",
@@ -141,62 +172,144 @@ class Augmentation(torch.nn.Module):
             raise ValueError(f"Unknown regime: {regime}")
         self.regime = regime
         with open(config_file, 'r') as f:
-            self.augmentation_params = json.load(f)
-        self.channel_switch = channel_switch_transform(
-                                self.augmentation_params['channel_switch'])
-        self.addition = addition_transform(
-            prob=self.augmentation_params['addition'][0],
-            value=self.augmentation_params['addition'][1],
-            range_val=25 if len(self.augmentation_params['addition']) < 3 else
-            self.augmentation_params['addition'][2]
-        )
-        self.gaussian_noise = gaussian_noise_transform(
-            prob=self.augmentation_params['gaussian_noise'][0],
-            mean=0.0 if len(self.augmentation_params['gaussian_noise']) < 2
-            else self.augmentation_params['gaussian_noise'][1],
-            std=1.0 if len(self.augmentation_params['gaussian_noise']) < 3
-            else self.augmentation_params['gaussian_noise'][2]
-        )
-        self.dropout = dropout_transform(
-            prob=self.augmentation_params['dropout'][0],
-            dropout_prob=0.1 if len(self.augmentation_params['dropout']) < 2
-            else self.augmentation_params['dropout'][1]
-        )
-        self.gaussian_blur = gaussian_blur_transform(
-            prob=self.augmentation_params['gaussian_blur'][0],
-            kernel_size=3 if len(self.augmentation_params['gaussian_blur']) < 2
-            else self.augmentation_params['gaussian_blur'][1],
-            sigma=1.0 if len(self.augmentation_params['gaussian_blur']) < 3
-            else self.augmentation_params['gaussian_blur'][2]
-        )
-        self.solarize = v2.RandomSolarize(
-            threshold=self.augmentation_params['solarize'][0],
-            p=self.augmentation_params['solarize'][1]
-        )
-        self.equalize = v2.RandomEqualize(
-            p=self.augmentation_params['equalize']
-        )
+            cfg = json.load(f)
+        aug_def = cfg["augmentation"]
+        pipeline = []
+        for name in cfg["pipeline"]:
+            if name == "channel_switch":
+                if aug_def['channel_switch']['prob'] == 0.0:
+                    continue
+                pipeline.append(
+                    channel_switch_transform(
+                        aug_def['channel_switch']['prob'])
+                )
+            elif name == "addition":
+                addition_params = aug_def['addition']
+                if addition_params['prob'] == 0.0:
+                    continue
+                pipeline.append(
+                    addition_transform(
+                        prob=addition_params['prob'],
+                        value=addition_params['value'],
+                        range_val=25 if 'range_val' not in addition_params
+                        else addition_params['range_val']
+                    )
+                )
+            elif name == "gaussian_noise":
+                gn_params = aug_def['gaussian_noise']
+                if gn_params['prob'] == 0.0:
+                    continue
+                pipeline.append(
+                    gaussian_noise_transform(
+                        prob=gn_params['prob'],
+                        mean=0.0 if 'mean' not in gn_params
+                        else gn_params['mean'],
+                        std=1.0 if 'std' not in gn_params
+                        else gn_params['std']
+                    )
+                )
+            elif name == "dropout":
+                do_params = aug_def['dropout']
+                if do_params['prob'] == 0.0:
+                    continue
+                pipeline.append(
+                    dropout_transform(
+                        prob=do_params['prob'],
+                        dropout_prob=0.1 if 'dropout_prob' not in do_params
+                        else do_params['dropout_prob']
+                    )
+                )
+            elif name == "gaussian_blur":
+                gb_params = aug_def['gaussian_blur']
+                if gb_params['prob'] == 0.0:
+                    continue
+                pipeline.append(
+                    gaussian_blur_transform(
+                        prob=gb_params['prob'],
+                        kernel_size=3 if 'kernel_size' not in gb_params
+                        else gb_params['kernel_size'],
+                        sigma=1.0 if 'sigma' not in gb_params
+                        else gb_params['sigma']
+                    )
+                )
+            elif name == "solarize":
+                solarize_params = aug_def['solarize']
+                if solarize_params['prob'] == 0.0:
+                    continue
+                pipeline.append(
+                    v2.RandomSolarize(
+                        p=solarize_params['prob'],
+                        threshold=solarize_params['threshold']
+                    )
+                )
+            elif name == "equalize":
+                if aug_def['equalize']['prob'] == 0.0:
+                    continue
+                pipeline.append(
+                    v2.RandomEqualize(
+                        p=aug_def['equalize']['prob']
+                    )
+                )
+        if len(pipeline) == 0:
+            pipeline.append(v2.Lambda(lambda x: x))
+        self.transforms = v2.Compose(pipeline)
 
     def region_transform(self, original_image: torch.Tensor,
                          augmented_image: torch.Tensor,
                          mask: torch.Tensor) -> torch.Tensor:
+        """
+        Blend an augmented image with the original according to the configured regime and mask.
+        Parameters
+        - original_image: torch.Tensor
+            The unmodified input image. Shape (..., C, H, W) or (C, H, W).
+        - augmented_image: torch.Tensor
+            The image after applying the augmentation pipeline. Same shape as original_image.
+        - mask: torch.Tensor
+            Foreground/background mask. Must be boolean or convertible to boolean and
+            broadcastable to the image shape. True indicates foreground (fish).
+        Returns
+        - torch.Tensor
+            The composited image where pixels are selected from original or augmented
+            according to the regime:
+            - "whole-image": augmented_image
+            - "background-only": original where mask is True, augmented otherwise
+            - "fish-only": augmented where mask is True, original otherwise
+        """
         if self.regime == "whole-image":
             return augmented_image
         elif self.regime == "background-only":
             return torch.where(mask.bool(), original_image, augmented_image)
-        else:  # fish-only
+        elif self.regime == "fish-only":
             return torch.where(mask.bool(), augmented_image, original_image)
+        else:
+            raise ValueError(f"Unknown regime: {self.regime}")
 
     def forward(self, image: torch.Tensor,
                 mask: torch.Tensor) -> torch.Tensor:
+        """
+        Apply the augmentation pipeline to the input image and optionally blend
+        it with the original based on the region-aware augmentation regime.
+
+        Parameters
+        ----------
+        image : torch.Tensor
+            Input tensor representing an image. Expected shape is (C, H, W).
+        mask : torch.Tensor
+            Foreground mask used for region-specific augmentation.
+
+        Returns
+        -------
+        torch.Tensor
+            Augmented (or partially augmented) image. If `regime="none"`,
+            the function returns the original image unchanged.
+
+        Notes
+        -----
+        - The augmentation pipeline is built using torchvision v2 transforms.
+        - A clone of the input image is preserved for blending purposes.
+        """
         if self.regime == "none":
             return image
         original_image = image.clone()
-        image = self.solarize(image)
-        image = self.channel_switch(image)
-        image = self.addition(image)
-        image = self.gaussian_noise(image)
-        image = self.equalize(image)
-        image = self.gaussian_blur(image)
-        image = self.dropout(image)
+        image = self.transforms(image)
         return self.region_transform(original_image, image, mask)
