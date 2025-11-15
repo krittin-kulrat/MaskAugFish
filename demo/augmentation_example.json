@@ -1,0 +1,43 @@
+{
+  "augmentation": {
+    "channel_switch": {
+      "prob": 0.5
+    },
+    "addition": {
+      "prob": 0.4,
+      "value": 10,
+      "range_val": 25
+    },
+    "gaussian_noise": {
+      "prob": 0.5,
+      "mean": 0.0,
+      "std": 0.8
+    },
+    "dropout": {
+      "prob": 0.3,
+      "dropout_prob": 0.1
+    },
+    "gaussian_blur": {
+      "prob": 0.4,
+      "kernel_size": 5,
+      "sigma": 1.2
+    },
+    "solarize": {
+      "prob": 0.2,
+      "threshold": 0.5
+    },
+    "equalize": {
+      "prob": 0.3
+    }
+  },
+
+  "pipeline": [
+    "channel_switch",
+    "addition",
+    "gaussian_noise",
+    "dropout",
+    "gaussian_blur",
+    "solarize",
+    "equalize"
+  ]
+}
