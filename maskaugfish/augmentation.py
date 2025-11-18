@@ -153,7 +153,106 @@ def dropout_transform(prob: float,
 
 class Augmentation(torch.nn.Module):
     """
-    (same docstring as you wrote)
+    Configurable augmentation module that builds a torchvision v2 transform pipeline from a JSON
+    configuration and applies it to either the whole image, the foreground ("fish") region, the
+    background, or not at all, using a binary mask to select regions.
+    This module composes a sequence of transforms based on the "pipeline" list and corresponding
+    parameters under the "augmentation" mapping in the provided config file. Transforms with a
+    probability of 0.0 are skipped. If all transforms are skipped, an identity transform is used.
+    Parameters:
+        config_file (str): Path to a JSON file describing the augmentation pipeline.
+        regime (str): Region-selection mode indicating where to apply the composed transforms.
+            One of:
+            - "whole-image": apply to the entire image.
+            - "fish-only": apply only where mask == True.
+            - "background-only": apply only where mask == False.
+            - "none": disable augmentation and return the input image unchanged.
+    Expected JSON schema:
+        {
+          "pipeline": [
+            "channel_switch",
+            "addition",
+            "gaussian_noise",
+            "dropout",
+            "gaussian_blur",
+            "solarize",
+            "equalize"
+          ],
+          "augmentation": {
+            "channel_switch": {
+              "prob": float
+            },
+            "addition": {
+              "prob": float,
+              "value": int,
+              "range_val": int  # optional, default: 25
+            },
+            "gaussian_noise": {
+              "prob": float,
+              "mean": float,    # optional, default: 0.0
+              "std": float      # optional, default: 1.0
+            },
+            "dropout": {
+              "prob": float,
+              "dropout_prob": float  # optional, default: 0.1
+            },
+            "gaussian_blur": {
+              "prob": float,
+              "kernel_size": int,    # optional, default: 3
+              "sigma": float         # optional, default: 1.0
+            },
+            "solarize": {
+              "prob": float,
+              "threshold": int
+            },
+            "equalize": {
+              "prob": float
+            }
+          }
+        }
+    Supported transforms:
+        - channel_switch: constructed via channel_switch_transform(prob).
+        - addition: constructed via addition_transform(prob, value, range_val).
+        - gaussian_noise: constructed via gaussian_noise_transform(prob, mean, std).
+        - dropout: constructed via dropout_transform(prob, dropout_prob).
+        - gaussian_blur: constructed via gaussian_blur_transform(prob, kernel_size, sigma).
+        - solarize: torchvision.transforms.v2.RandomSolarize(p, threshold).
+        - equalize: torchvision.transforms.v2.RandomEqualize(p).
+        If none are active (prob = 0.0 for all), an identity transform is applied.
+    Inputs to forward():
+        image (torch.Tensor): Image tensor of shape (C, H, W). Dtype can be uint8 in [0, 255]
+            or float in [0.0, 1.0], as supported by torchvision v2 transforms.
+        mask (torch.Tensor): Binary/boolean mask indicating the foreground ("fish") region.
+            Shape must be broadcastable to image, e.g. (H, W) or (1, H, W). Values are converted
+            to bool internally (True = foreground).
+    Returns:
+        torch.Tensor: Augmented image tensor with the same shape and dtype as the input image.
+    Behavior:
+        - regime == "whole-image": the composed transform is applied to the entire image.
+        - regime == "fish-only": only pixels where mask is True are replaced by the augmented image.
+        - regime == "background-only": only pixels where mask is False are replaced by the augmented image.
+        - regime == "none": the input image is returned unchanged.
+    Raises:
+        ValueError: If an unknown regime is provided.
+    Notes:
+        - The functions channel_switch_transform, addition_transform, gaussian_noise_transform,
+          dropout_transform, gaussian_blur_transform, and identity_transform must be available
+          in the import path.
+        - For reproducibility, set PyTorch and torchvision RNG seeds prior to calling forward().
+        - This module operates on single images (C, H, W). If working with batches, apply it per-sample.
+    Example:
+        JSON (config_file):
+            {
+              "pipeline": ["gaussian_noise", "gaussian_blur", "equalize"],
+              "augmentation": {
+                "gaussian_noise": {"prob": 0.5, "mean": 0.0, "std": 0.1},
+                "gaussian_blur": {"prob": 0.3, "kernel_size": 5, "sigma": 1.2},
+                "equalize": {"prob": 0.2}
+              }
+            }
+        Usage:
+            aug = Augmentation(config_file="path/to/config.json", regime="fish-only")
+            out = aug(image, mask)
     """
     def __init__(self, config_file: str,
                  regime: str = "whole-image") -> None:
