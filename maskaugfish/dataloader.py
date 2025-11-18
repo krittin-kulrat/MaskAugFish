@@ -124,7 +124,7 @@ def build_index(
         cls_id = class_to_id[c]
         cls_dir = img_root / c
         for ip in list_images(cls_dir):
-            mp = mask_lookup.get(ip.stem)
+            mp = mask_lookup.get(ip.stem.replace('fish', 'mask'))
             samples.append((str(ip), str(mp) if mp is not None else None, cls_id))
 
     return samples, class_to_id
@@ -216,12 +216,10 @@ class FishDataset(Dataset):
         if mask_path is not None:  # NOTE: removed Path(mask_path).exists() per reviewer
             mask_raw = self._read_uint8(mask_path, gray=True)  # [1,H,W] uint8
 
+
         # apply optional augment first (on uint8)
         if self.augment is not None:
-            if mask_raw is not None:
-                img, mask_raw = self.augment(img, mask_raw)   # joint augment
-            else:
-                img = self.augment(img)
+            img = self.augment(img, mask_raw)   # joint augment
 
         # then resize + to float32 [0,1]
         img = self.base_tf_img(img)
@@ -433,24 +431,12 @@ if __name__ == "__main__":
     freq_all = dict(sorted(Counter(ys_all).items()))
     print(f"[CHECK] Overall class frequencies: {freq_all}")
 
-    # Build a tiny default augment pipeline for training just to verify code path
-    class JointHFlip:
-        def __init__(self, p: float = 0.5): self.p = p
-        def __call__(self, img: torch.Tensor, mask: torch.Tensor = None):
-            if torch.rand(1).item() < self.p:
-                img = torch.flip(img, dims=[2])   # flip width
-                if mask is not None:
-                    mask = torch.flip(mask, dims=[2])
-            return (img, mask) if mask is not None else img
-
-    default_aug = JointHFlip(p=0.5)
-
     train_loader, val_loader, test_loader = make_dataloaders(
         samples=samples,
         batch_size=args.bs,
         num_workers=args.num_workers,
         img_size=args.img_size,
-        augment_pipeline=default_aug,
+        augment_pipeline=None,
         weighted_train=not args.no_weighted,
         seed=args.seed,
         test_ratio=args.test_ratio,
