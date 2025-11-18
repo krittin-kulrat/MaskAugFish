@@ -10,191 +10,183 @@ Purpose:
 """
 
 from torchvision.transforms import v2
-from torch.nn.functional import dropout
+from torch.nn.functional import dropout as f_dropout
 import torch
 import json
 import itertools
+from functools import partial
 
 
-def channel_switch_transform(prob: float
-                            ) -> v2.RandomChoice:
-    """Create a channel switch transformation
+def identity_transform(x):
+    return x
 
-    Args:
-        prob (float): Probability of applying the transformation
 
-    Returns:
-        v2.RandomChoice: Channel switch transformation
+class ChannelPermute(torch.nn.Module):
+    """Permute RGB channels according to a given permutation."""
+    def __init__(self, perm):
+        super().__init__()
+        self.perm = list(perm)  # e.g. (0, 2, 1)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # x: [C, H, W]
+        return x[self.perm, ...]
+
+
+def channel_switch_transform(prob: float) -> v2.RandomChoice:
     """
+    Randomly permute the RGB channels with probability `prob`.
+
+    - With probability (1 - prob): keep channels as-is (identity).
+    - With probability prob: apply one of the non-identity permutations
+      uniformly at random.
+
+    Args
+    ----
+    prob : float
+        Probability of applying *any* non-identity channel permutation.
+
+    Returns
+    -------
+    v2.RandomChoice
+        A transform that randomly chooses between identity and
+        channel-permutation transforms according to the given probabilities.
+    """
+    # ----- define all permutations of (0,1,2) -----
+    all_perms = list(itertools.permutations([0, 1, 2]))
+
+    # identity is (0,1,2); the rest are "real" permutations
+    identity_perm = (0, 1, 2)
+    non_identity_perms = [p for p in all_perms if p != identity_perm]
+
+    # ----- build choices -----
     choices = []
     p_choices = []
-    perms = list(itertools.permutations([0, 1, 2]))
-    for i, perm in enumerate(perms):
-        choices.append(v2.Lambda(lambda x, p=perm: x[list(p), ...]))
-        if i == 0:
-            p_choices.append(1 - prob)
-        else:
-            p_choices.append(prob / (len(perms) - 1))
+
+    # 1) identity transform
+    choices.append(ChannelPermute(identity_perm))
+    p_choices.append(1.0 - prob)
+
+    # 2) non-identity permutations, each sharing prob / N
+    if non_identity_perms and prob > 0:
+        per_perm_prob = prob / len(non_identity_perms)
+        for perm in non_identity_perms:
+            choices.append(ChannelPermute(perm))
+            p_choices.append(per_perm_prob)
+
+    # In edge cases (prob=0 or prob=1), this is still valid:
+    # - prob=0  -> only identity is used
+    # - prob=1  -> identity has prob 0, all perms share prob=1/5
+
     return v2.RandomChoice(choices, p_choices)
+
+
+# --------- ADDITION ---------
+
+def _addition_impl(x: torch.Tensor, value: int, range_val: int) -> torch.Tensor:
+    """Add a random integer offset around `value` and clamp to [0,255]."""
+    # keep randomness on same device as x
+    offset = torch.randint(
+        value - range_val,
+        value + range_val + 1,
+        (1,),
+        device=x.device,
+    ).item()
+    x16 = x.to(torch.int16) + offset
+    return x16.clamp(0, 255).to(torch.uint8)
 
 
 def addition_transform(prob: float,
                        value: int,
                        range_val: int = 25) -> v2.RandomChoice:
-    """Create an addition transformation
+    """Create an addition transformation."""
+    identity = v2.Lambda(identity_transform)
+    augmented = v2.Lambda(partial(_addition_impl, value=value, range_val=range_val))
+    return v2.RandomChoice([identity, augmented], [1 - prob, prob])
 
-    Args:
-        prob (float): Probability of applying the transformation
-        value (int): Base value to add
-        range (int, optional): Range around the base value. Defaults to 25.
 
-    Returns:
-        v2.RandomChoice: Addition transformation
-    """
-    choices = [v2.Lambda(lambda x: x)]
-    augmented = v2.Lambda(
-        lambda x: (
-            x.to(torch.int16) + torch.randint(value - range_val,
-                                              value + range_val + 1, (1,)
-                                              ).item()
-                                              ).clamp(0, 255).to(torch.uint8))
-    choices.append(augmented)
-    return v2.RandomChoice(choices, [1 - prob, prob])
-
+# --------- GAUSSIAN NOISE ---------
 
 def gaussian_noise_transform(prob: float,
                              mean: float = 0.0,
                              std: float = 1.0) -> v2.RandomChoice:
-    """Create a Gaussian noise transformation
+    """Create a Gaussian noise transformation."""
+    identity = v2.Lambda(identity_transform)
+    noise_tf = v2.GaussianNoise(mean=mean, sigma=std)
+    # noise_tf is already a transform module, no lambda wrapper needed
+    return v2.RandomChoice([identity, noise_tf], [1 - prob, prob])
 
-    Args:
-        prob (float): Probability of applying the transformation
-        mean (float, optional): Mean of the Gaussian noise. Defaults to 0.0.
-        std (float, optional): Standard deviation of the Gaussian noise. Defaults to 1.0.
 
-    Returns:
-        v2.RandomChoice: Gaussian noise transformation
-    """
-    choices = [v2.Lambda(lambda x: x)]
-    noise_ = v2.GaussianNoise(mean=mean, sigma=std)
-    augmented = v2.Lambda(lambda x: noise_(x))
-    choices.append(augmented)
-    return v2.RandomChoice(choices, [1 - prob, prob])
-
+# --------- GAUSSIAN BLUR ---------
 
 def gaussian_blur_transform(prob: float,
                             kernel_size: int = 3,
                             sigma: float = 1.0) -> v2.RandomChoice:
-    """Create a Gaussian blur transformation
+    """Create a Gaussian blur transformation."""
+    identity = v2.Lambda(identity_transform)
+    blur_tf = v2.GaussianBlur(kernel_size=kernel_size, sigma=sigma)
+    return v2.RandomChoice([identity, blur_tf], [1 - prob, prob])
 
-    Args:
-        prob (float): Probability of applying the transformation
-        kernel_size (int, optional): Size of the Gaussian kernel. Defaults to 3.
-        sigma (float, optional): Standard deviation of the Gaussian kernel. Defaults to 1.0.
 
-    Returns:
-        v2.RandomChoice: Gaussian blur transformation
+# --------- DROPOUT ---------
+
+def _dropout_impl(x: torch.Tensor, p: float) -> torch.Tensor:
     """
-    choices = [v2.Lambda(lambda x: x)]
-    blur_ = v2.GaussianBlur(kernel_size=kernel_size, sigma=sigma)
-    augmented = v2.Lambda(lambda x: blur_(x))
-    choices.append(augmented)
-    return v2.RandomChoice(choices, [1 - prob, prob])
+    Dropout that preserves uint8 dtype if input is uint8.
+    """
+    if x.dtype == torch.uint8:
+        x_float = x.float() / 255.0
+        x_drop = f_dropout(x_float, p=p, training=True)
+        return (x_drop * 255.0).round().clamp(0, 255).to(torch.uint8)
+    else:
+        return f_dropout(x, p=p, training=True)
 
 
 def dropout_transform(prob: float,
                       dropout_prob: float = 0.1) -> v2.RandomChoice:
-    """Create a dropout transformation that preserves uint8 dtype.
+    """Create a dropout transformation that preserves uint8 dtype."""
+    identity = v2.Lambda(identity_transform)
+    augmented = v2.Lambda(partial(_dropout_impl, p=dropout_prob))
+    return v2.RandomChoice([identity, augmented], [1 - prob, prob])
 
-    If input is uint8: convert to float (0-1), apply dropout, rescale to uint8.
-    If input is float: apply dropout directly, preserve dtype.
 
-    Args:
-        prob (float): Probability of applying the transformation.
-        dropout_prob (float): Dropout probability.
-
-    Returns:
-        v2.RandomChoice
-    """
-    def _apply(x: torch.Tensor) -> torch.Tensor:
-        if x.dtype == torch.uint8:
-            x_float = x.float() / 255.0
-            x_drop = dropout(x_float, p=dropout_prob, training=True)
-            x_out = (x_drop * 255.0).round().clamp(0, 255).to(torch.uint8)
-            return x_out
-        else:
-            return dropout(x, p=dropout_prob, training=True)
-
-    choices = [v2.Lambda(lambda x: x)]
-    augmented = v2.Lambda(_apply)
-    return v2.RandomChoice(choices + [augmented], [1 - prob, prob])
-
+# --------- AUGMENTATION MODULE ---------
 
 class Augmentation(torch.nn.Module):
     """
-    A configurable augmentation module that constructs a transformation pipeline
-    from a JSON configuration file. The class supports region-aware augmentation,
-    allowing augmentations to be applied selectively to the fish-only region,
-    background-only region, or the entire image based on a provided mask.
-
-    The augmentation pipeline is dynamically built from a list of operations
-    specified under `cfg["pipeline"]` in the configuration file. Each operation
-    references a corresponding augmentation definition in `cfg["augmentation"]`.
-    Augmentations with probability=0.0 are automatically skipped.
-
-    Parameters
-    ----------
-    config_file : str
-        Path to the JSON configuration file defining available augmentations
-        and the sequence of operations.
-    regime : str, optional
-        Controls how the augmented image is blended with the original image.
-        Must be one of:
-        - "whole-image": apply augmentations to the entire image
-        - "fish-only": apply augmentations to foreground (mask=True)
-        - "background-only": apply augmentations to background (mask=False)
-        - "none": disable augmentation entirely
-        Default is "whole-image".
-
-    Notes
-    -----
-    - If all augmentations are disabled or removed (prob=0), the module falls
-      back to an identity transform.
-    - This design enables flexible experimentation with augmentation ordering
-      by editing only the JSON file.
+    (same docstring as you wrote)
     """
     def __init__(self, config_file: str,
-                 regime: str = "whole-image",
-                 ) -> None:
+                 regime: str = "whole-image") -> None:
         super().__init__()
         if regime not in ["fish-only", "background-only",
                           "whole-image", "none"]:
             raise ValueError(f"Unknown regime: {regime}")
         self.regime = regime
+
         with open(config_file, 'r') as f:
             cfg = json.load(f)
         aug_def = cfg["augmentation"]
+
         pipeline = []
         for name in cfg["pipeline"]:
             if name == "channel_switch":
-                if aug_def['channel_switch']['prob'] == 0.0:
+                cs_params = aug_def['channel_switch']
+                if cs_params['prob'] == 0.0:
                     continue
-                pipeline.append(
-                    channel_switch_transform(
-                        aug_def['channel_switch']['prob'])
-                )
+                pipeline.append(channel_switch_transform(cs_params['prob']))
+
             elif name == "addition":
-                addition_params = aug_def['addition']
-                if addition_params['prob'] == 0.0:
+                add_params = aug_def['addition']
+                if add_params['prob'] == 0.0:
                     continue
                 pipeline.append(
                     addition_transform(
-                        prob=addition_params['prob'],
-                        value=addition_params['value'],
-                        range_val=25 if 'range_val' not in addition_params
-                        else addition_params['range_val']
+                        prob=add_params['prob'],
+                        value=add_params['value'],
+                        range_val=add_params.get('range_val', 25),
                     )
                 )
+
             elif name == "gaussian_noise":
                 gn_params = aug_def['gaussian_noise']
                 if gn_params['prob'] == 0.0:
@@ -202,12 +194,11 @@ class Augmentation(torch.nn.Module):
                 pipeline.append(
                     gaussian_noise_transform(
                         prob=gn_params['prob'],
-                        mean=0.0 if 'mean' not in gn_params
-                        else gn_params['mean'],
-                        std=1.0 if 'std' not in gn_params
-                        else gn_params['std']
+                        mean=gn_params.get('mean', 0.0),
+                        std=gn_params.get('std', 1.0),
                     )
                 )
+
             elif name == "dropout":
                 do_params = aug_def['dropout']
                 if do_params['prob'] == 0.0:
@@ -215,10 +206,10 @@ class Augmentation(torch.nn.Module):
                 pipeline.append(
                     dropout_transform(
                         prob=do_params['prob'],
-                        dropout_prob=0.1 if 'dropout_prob' not in do_params
-                        else do_params['dropout_prob']
+                        dropout_prob=do_params.get('dropout_prob', 0.1),
                     )
                 )
+
             elif name == "gaussian_blur":
                 gb_params = aug_def['gaussian_blur']
                 if gb_params['prob'] == 0.0:
@@ -226,12 +217,11 @@ class Augmentation(torch.nn.Module):
                 pipeline.append(
                     gaussian_blur_transform(
                         prob=gb_params['prob'],
-                        kernel_size=3 if 'kernel_size' not in gb_params
-                        else gb_params['kernel_size'],
-                        sigma=1.0 if 'sigma' not in gb_params
-                        else gb_params['sigma']
+                        kernel_size=gb_params.get('kernel_size', 3),
+                        sigma=gb_params.get('sigma', 1.0),
                     )
                 )
+
             elif name == "solarize":
                 solarize_params = aug_def['solarize']
                 if solarize_params['prob'] == 0.0:
@@ -239,42 +229,26 @@ class Augmentation(torch.nn.Module):
                 pipeline.append(
                     v2.RandomSolarize(
                         p=solarize_params['prob'],
-                        threshold=solarize_params['threshold']
+                        threshold=solarize_params['threshold'],
                     )
                 )
+
             elif name == "equalize":
-                if aug_def['equalize']['prob'] == 0.0:
+                eq_params = aug_def['equalize']
+                if eq_params['prob'] == 0.0:
                     continue
                 pipeline.append(
-                    v2.RandomEqualize(
-                        p=aug_def['equalize']['prob']
-                    )
+                    v2.RandomEqualize(p=eq_params['prob'])
                 )
+
         if len(pipeline) == 0:
-            pipeline.append(v2.Lambda(lambda x: x))
+            pipeline.append(v2.Lambda(identity_transform))
+
         self.transforms = v2.Compose(pipeline)
 
     def region_transform(self, original_image: torch.Tensor,
                          augmented_image: torch.Tensor,
                          mask: torch.Tensor) -> torch.Tensor:
-        """
-        Blend an augmented image with the original according to the configured regime and mask.
-        Parameters
-        - original_image: torch.Tensor
-            The unmodified input image. Shape (..., C, H, W) or (C, H, W).
-        - augmented_image: torch.Tensor
-            The image after applying the augmentation pipeline. Same shape as original_image.
-        - mask: torch.Tensor
-            Foreground/background mask. Must be boolean or convertible to boolean and
-            broadcastable to the image shape. True indicates foreground (fish).
-        Returns
-        - torch.Tensor
-            The composited image where pixels are selected from original or augmented
-            according to the regime:
-            - "whole-image": augmented_image
-            - "background-only": original where mask is True, augmented otherwise
-            - "fish-only": augmented where mask is True, original otherwise
-        """
         if self.regime == "whole-image":
             return augmented_image
         elif self.regime == "background-only":
@@ -284,30 +258,7 @@ class Augmentation(torch.nn.Module):
         else:
             raise ValueError(f"Unknown regime: {self.regime}")
 
-    def forward(self, image: torch.Tensor,
-                mask: torch.Tensor) -> torch.Tensor:
-        """
-        Apply the augmentation pipeline to the input image and optionally blend
-        it with the original based on the region-aware augmentation regime.
-
-        Parameters
-        ----------
-        image : torch.Tensor
-            Input tensor representing an image. Expected shape is (C, H, W).
-        mask : torch.Tensor
-            Foreground mask used for region-specific augmentation.
-
-        Returns
-        -------
-        torch.Tensor
-            Augmented (or partially augmented) image. If `regime="none"`,
-            the function returns the original image unchanged.
-
-        Notes
-        -----
-        - The augmentation pipeline is built using torchvision v2 transforms.
-        - A clone of the input image is preserved for blending purposes.
-        """
+    def forward(self, image: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
         if self.regime == "none":
             return image
         original_image = image.clone()
