@@ -216,7 +216,6 @@ class FishDataset(Dataset):
         if mask_path is not None:  # NOTE: removed Path(mask_path).exists() per reviewer
             mask_raw = self._read_uint8(mask_path, gray=True)  # [1,H,W] uint8
 
-
         # apply optional augment first (on uint8)
         if self.augment is not None:
             img = self.augment(img, mask_raw)   # joint augment
