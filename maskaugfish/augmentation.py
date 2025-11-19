@@ -15,6 +15,7 @@ import torch
 import json
 import itertools
 from functools import partial
+from typing import Dict, Union
 
 
 def identity_transform(x):
@@ -254,17 +255,24 @@ class Augmentation(torch.nn.Module):
             aug = Augmentation(config_file="path/to/config.json", regime="fish-only")
             out = aug(image, mask)
     """
-    def __init__(self, config_file: str,
+    def __init__(self, config_file: Union[str, Dict],
                  regime: str = "whole-image") -> None:
         super().__init__()
         if regime not in ["fish-only", "background-only",
                           "whole-image", "none"]:
             raise ValueError(f"Unknown regime: {regime}")
         self.regime = regime
-
-        with open(config_file, 'r') as f:
-            cfg = json.load(f)
-        aug_def = cfg["augmentation"]
+        if isinstance(config_file, dict):
+            cfg = config_file
+        elif isinstance(config_file, str):
+            if config_file.endswith('.json'):
+                with open(config_file, 'r') as f:
+                    cfg = json.load(f)
+            else:  # Input is json string
+                cfg = json.loads(config_file)
+        else:
+            raise TypeError("Unknown config_file type")
+        aug_def = cfg["augmentations"]
 
         pipeline = []
         for name in cfg["pipeline"]:
