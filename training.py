@@ -2,21 +2,22 @@ import argparse
 import json
 import time
 from pathlib import Path
+import csv
 
-import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.optim import lr_scheduler
-from sklearn.metrics import (
-    f1_score,
-    confusion_matrix,
-    classification_report,
-)
 import torchvision.models as models
-import csv
+from torchmetrics.classification import (
+    MulticlassAccuracy,
+    MulticlassF1Score,
+    MulticlassConfusionMatrix,
+)
+
 
 from dataloader import build_index, make_dataloaders
+
 
 
 def freeze_all_but_fc(model: nn.Module, freeze: bool = True):
@@ -25,6 +26,7 @@ def freeze_all_but_fc(model: nn.Module, freeze: bool = True):
         p.requires_grad = not freeze
     for p in model.fc.parameters():
         p.requires_grad = True
+
 
 
 class EarlyStoppingLoss:
@@ -47,6 +49,44 @@ class EarlyStoppingLoss:
             return self.bad_epochs >= self.patience
 
 
+def compute_metrics_torch(
+    preds: torch.Tensor, gts: torch.Tensor, num_classes: int
+):
+    """
+    Compute confusion matrix, macro accuracy, and macro F1 using torchmetrics.
+    Args:
+        preds: [N] tensor of predicted class indices
+        gts: [N] tensor of ground-truth class indices
+        num_classes: number of classes
+    """
+
+    preds = preds.to(torch.int64)
+    gts = gts.to(torch.int64)
+
+    acc_metric = MulticlassAccuracy(
+        num_classes=num_classes,
+        average="macro",
+    )
+    f1_metric = MulticlassF1Score(
+        num_classes=num_classes,
+        average="macro",
+    )
+    cm_metric = MulticlassConfusionMatrix(
+        num_classes=num_classes,
+    )
+
+    # Compute metrics
+    macro_acc = acc_metric(preds, gts)   # scalar tensor
+    macro_f1 = f1_metric(preds, gts)     # scalar tensor
+    cm = cm_metric(preds, gts)           # [C, C] tensor
+
+    return float(macro_acc.item()), float(macro_f1.item()), cm
+
+
+
+# ------------------------------------------------------------
+# training loop
+# ------------------------------------------------------------
 def train_model(
     model: nn.Module,
     train_loader,
@@ -61,7 +101,7 @@ def train_model(
     patience: int = 5,
 ):
 
-    # ----- optimizer + scheduler -----
+    # optimizer + scheduler
     if opt_name == "sgd":
         optimizer = optim.SGD(
             filter(lambda p: p.requires_grad, model.parameters()),
@@ -77,7 +117,6 @@ def train_model(
         )
         scheduler = lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
 
-    # ----- early stopping on validation loss -----
     early_stopper = EarlyStoppingLoss(patience=patience, min_delta=0.0)
 
     history = []
@@ -86,7 +125,7 @@ def train_model(
     best_info = None
 
     for epoch in range(1, epochs + 1):
-        # ---- train ----
+        # -------- train --------
         model.train()
         train_loss = 0.0
 
@@ -102,10 +141,10 @@ def train_model(
 
             train_loss += loss.item() * x.size(0)
 
-        train_loss /= len(train_loader.dataset)
+        train_loss /= max(1, len(train_loader.dataset))
         scheduler.step()
 
-        # ---- validation ----
+        # -------- validation --------
         model.eval()
         val_loss = 0.0
         all_preds, all_gts = [], []
@@ -120,28 +159,19 @@ def train_model(
                 val_loss += loss.item() * x.size(0)
 
                 preds = torch.argmax(logits, dim=1)
-                all_preds.append(preds.cpu().numpy())
-                all_gts.append(y.cpu().numpy())
+                all_preds.append(preds.detach().cpu())
+                all_gts.append(y.detach().cpu())
 
-        val_loss /= len(val_loader.dataset)
-        all_preds = np.concatenate(all_preds)
-        all_gts = np.concatenate(all_gts)
+        val_loss /= max(1, len(val_loader.dataset))
 
-        # macro accuracy + macro F1 (no micro metrics)
-        cm_val = confusion_matrix(
-            all_gts, all_preds, labels=list(range(num_classes))
-        )
-        per_class_acc = []
-        for i in range(num_classes):
-            support = cm_val[i].sum()
-            correct = cm_val[i, i]
-            acc_i = correct / support if support > 0 else 0.0
-            per_class_acc.append(acc_i)
-        val_macroAcc = float(np.mean(per_class_acc))
-
-        val_macroF1 = f1_score(
-            all_gts, all_preds, average="macro", zero_division=0.0
-        )
+        if all_preds:
+            all_preds = torch.cat(all_preds)
+            all_gts = torch.cat(all_gts)
+            val_macroAcc, val_macroF1, _ = compute_metrics_torch(
+                all_preds, all_gts, num_classes
+            )
+        else:
+            val_macroAcc, val_macroF1 = 0.0, 0.0
 
         history.append(
             {
@@ -159,10 +189,9 @@ def train_model(
             f"val_macroAcc={val_macroAcc:.3f} val_macroF1={val_macroF1:.3f}"
         )
 
-        # track best model by *lowest val_loss*
+        # track best by lowest val_loss
         if val_loss < best_val_loss:
             best_val_loss = val_loss
-            # copy state_dict to CPU to decouple from further training
             best_state = {k: v.cpu().clone() for k, v in model.state_dict().items()}
             best_info = {
                 "epoch": epoch,
@@ -171,7 +200,7 @@ def train_model(
                 "val_macroF1": float(val_macroF1),
             }
 
-        # early stopping check
+        # early stopping
         if early_stopper.step(val_loss):
             print(
                 f"Early stopping at epoch {epoch} "
@@ -182,6 +211,9 @@ def train_model(
     return best_state, history, best_info
 
 
+# ------------------------------------------------------------
+# One fold of cross-validation
+# ------------------------------------------------------------
 def train_one_fold(args, fold_id: int = 0):
     """
     Train + evaluate a single fold (fold_id) and return summary metrics
@@ -193,7 +225,7 @@ def train_one_fold(args, fold_id: int = 0):
     outdir = Path("runs") / f"{timestamp}_fold{fold_id}"
     outdir.mkdir(parents=True, exist_ok=True)
 
-    # ----- dataset & loaders 
+    # ----- dataset & loaders (Krittin-style) -----
     samples, class_to_id = build_index(args.data_root)
     num_classes = len(class_to_id)
 
@@ -202,43 +234,46 @@ def train_one_fold(args, fold_id: int = 0):
         batch_size=args.batch,
         num_workers=args.workers,
         img_size=args.img_size,
-        augment_pipeline=None,          # baseline: no aug 
-        weighted_train=True,            # uses WeightedRandomSampler
+        augment_pipeline=None,          # baseline; you’ll swap in aug later
+        weighted_train=True,
         seed=args.seed,
         test_ratio=args.test_ratio,
         n_splits=args.n_splits,
         fold_id=fold_id,
     )
 
-    # ----- compute class weights for weighted CE  -----
+    # ----- class weights (all in Torch) -----
     if hasattr(train_loader.dataset, "y"):
-        train_labels = np.array(train_loader.dataset.y)
+        train_labels = torch.as_tensor(
+            train_loader.dataset.y, dtype=torch.long
+        )
     else:
         all_labels = []
         for batch in train_loader:
-            all_labels.append(batch["label"].numpy())
-        train_labels = np.concatenate(all_labels)
+            all_labels.append(batch["label"].detach().cpu())
+        train_labels = torch.cat(all_labels)
 
-    class_counts = np.bincount(train_labels, minlength=num_classes)
-    inv = 1.0 / np.clip(class_counts.astype(np.float32), 1, None)
+    class_counts = torch.bincount(train_labels, minlength=num_classes).float()
+    inv = 1.0 / torch.clamp(class_counts, min=1.0)
     weights = inv / inv.sum() * num_classes
-    class_weights = torch.tensor(weights, dtype=torch.float32, device=device)
+    class_weights = weights.to(device=device)
 
-    # ----- model: ResNet18 + ImageNet weights -----
-    model = models.resnet18(weights=models.ResNet18_Weights.IMAGENET1K_V1)
+    # ----- model -----
+    model = models.resnet18(
+        weights=models.ResNet18_Weights.IMAGENET1K_V1
+    )
     model.fc = nn.Linear(model.fc.in_features, num_classes)
     model.to(device)
 
-    # feature-extract or fine-tune (for your experiments, you'll use finetune only)
+    # feature vs finetune
     if args.phase == "feature":
         freeze_all_but_fc(model, freeze=True)
-    else:
+    else:  # "finetune" (your main mode)
         freeze_all_but_fc(model, freeze=False)
 
-    # weighted CrossEntropyLoss
     criterion = nn.CrossEntropyLoss(weight=class_weights)
 
-    # ----- call generic training loop -----
+    # ----- train using generic loop -----
     best_state, history, best_info = train_model(
         model,
         train_loader,
@@ -253,19 +288,21 @@ def train_one_fold(args, fold_id: int = 0):
     )
 
     # ----- save metrics.csv -----
-    with open(outdir / "metrics.csv", "w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=history[0].keys())
-        writer.writeheader()
-        writer.writerows(history)
+    if history:
+        with open(outdir / "metrics.csv", "w", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=history[0].keys())
+            writer.writeheader()
+            writer.writerows(history)
 
     # ----- save best checkpoint info -----
     torch.save(
         {"state_dict": best_state, "class_to_id": class_to_id},
         outdir / "best.pt",
     )
-    (outdir / "best.txt").write_text(json.dumps(best_info, indent=2))
+    if best_info is not None:
+        (outdir / "best.txt").write_text(json.dumps(best_info, indent=2))
 
-    # ----- final test evaluation using best_state -----
+    # ----- final test evaluation -----
     model.load_state_dict(best_state)
     model.to(device)
     model.eval()
@@ -277,8 +314,8 @@ def train_one_fold(args, fold_id: int = 0):
             y = batch["label"].to(device)
 
             logits = model(x)
-            preds.append(torch.argmax(logits, dim=1).cpu().numpy())
-            gts.append(y.cpu().numpy())
+            preds.append(torch.argmax(logits, dim=1).cpu())
+            gts.append(y.cpu())
 
     fold_summary = {
         "fold_id": fold_id,
@@ -290,73 +327,64 @@ def train_one_fold(args, fold_id: int = 0):
         "test_macroF1": None,
     }
 
-    if len(preds) > 0:
-        preds = np.concatenate(preds)
-        gts = np.concatenate(gts)
+    if preds:
+        preds = torch.cat(preds)
+        gts = torch.cat(gts)
 
-        cm = confusion_matrix(gts, preds, labels=list(range(num_classes)))
-
-        # macro accuracy from confusion matrix
-        per_class_acc = []
-        for i in range(num_classes):
-            support = cm[i].sum()
-            correct = cm[i, i]
-            acc_i = correct / support if support > 0 else 0.0
-            per_class_acc.append(acc_i)
-        test_macroAcc = float(np.mean(per_class_acc))
-        test_macroF1 = f1_score(
-            gts, preds, average="macro", zero_division=0.0
+        test_macroAcc, test_macroF1, cm = compute_metrics_torch(
+            preds, gts, num_classes
         )
 
         fold_summary["test_macroAcc"] = test_macroAcc
         fold_summary["test_macroF1"] = test_macroF1
 
-        np.savetxt(
-            outdir / "confusion_matrix.csv", cm, fmt="%d", delimiter=","
+        # save confusion matrix
+        with open(outdir / "confusion_matrix.csv", "w", newline="") as f:
+            writer = csv.writer(f)
+            for row in cm.cpu().tolist():
+                writer.writerow(row)
+
+        # per-class metrics
+        support = cm.sum(dim=1)
+        pred_count = cm.sum(dim=0)
+        correct = cm.diag()
+        eps = 1e-8
+
+        acc_per_class = torch.where(
+            support > 0,
+            correct.float() / (support.float() + eps),
+            torch.zeros_like(correct, dtype=torch.float32),
         )
-        (outdir / "test.txt").write_text(
-            json.dumps(
-                {"macroAcc": test_macroAcc, "macroF1": test_macroF1},
-                indent=2,
-            )
+        precision = torch.where(
+            pred_count > 0,
+            correct.float() / (pred_count.float() + eps),
+            torch.zeros_like(correct, dtype=torch.float32),
+        )
+        recall = torch.where(
+            support > 0,
+            correct.float() / (support.float() + eps),
+            torch.zeros_like(correct, dtype=torch.float32),
+        )
+        denom = precision + recall + eps
+        f1_per_class = torch.where(
+            denom > 0,
+            2.0 * precision * recall / denom,
+            torch.zeros_like(precision),
         )
 
-        # ---- per-class / per-species metrics ----
-        class_to_id = torch.load(outdir / "best.pt", map_location="cpu")["class_to_id"]
         id_to_class = {v: k for k, v in class_to_id.items()}
-        class_names = [id_to_class[i] for i in range(num_classes)]
-
-        report_text = classification_report(
-            gts, preds, target_names=class_names, zero_division=0.0
-        )
-        (outdir / "classification_report.txt").write_text(report_text)
-
-        report_dict = classification_report(
-            gts,
-            preds,
-            target_names=class_names,
-            output_dict=True,
-            zero_division=0.0,
-        )
-        (outdir / "classification_report.json").write_text(
-            json.dumps(report_dict, indent=2)
-        )
-
         per_class_rows = []
-        for i, name in enumerate(class_names):
-            support = int(cm[i].sum())
-            correct = int(cm[i, i])
-            acc_i = correct / support if support > 0 else 0.0
-            metrics_i = report_dict.get(name, {})
+        for i in range(num_classes):
+            name = id_to_class[i]
             per_class_rows.append(
                 {
                     "class_index": i,
                     "class_name": name,
-                    "support": support,
-                    "macroAcc": float(acc_i),
-                    "precision": float(metrics_i.get("precision", 0.0)),
-                    "recall": float(metrics_i.get("recall", 0.0)),
-                    "f1": float(metrics_i.get("f1-score", 0.0)),
+                    "support": int(support[i].item()),
+                    "macroAcc": float(acc_per_class[i].item()),
+                    "precision": float(precision[i].item()),
+                    "recall": float(recall[i].item()),
+                    "f1": float(f1_per_class[i].item()),
                 }
             )
 
@@ -381,11 +409,9 @@ def train_one_fold(args, fold_id: int = 0):
             "test_macroAcc": test_macroAcc,
             "test_macroF1": test_macroF1,
             "num_classes": num_classes,
-            "num_test_samples": int(len(gts)),
+            "num_test_samples": int(gts.numel()),
         }
-        (outdir / "test_summary.json").write_text(
-            json.dumps(summary, indent=2)
-        )
+        (outdir / "test_summary.json").write_text(json.dumps(summary, indent=2))
 
         print(
             f"[fold {fold_id}] TEST macroAcc={test_macroAcc:.3f} "
@@ -397,6 +423,7 @@ def train_one_fold(args, fold_id: int = 0):
     return fold_summary
 
 
+# main: run all folds and summarize CV
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--data_root", required=True)  # folder that contains data/fish_images
@@ -424,17 +451,14 @@ def main():
         fold_summary = train_one_fold(args, fold_id=fid)
         fold_summaries.append(fold_summary)
 
-    # ----- cross-validation summary -----
-    cv_out = Path("runs") / "cv_summary.json"
-    valid_folds = [
-        fs for fs in fold_summaries if fs["test_macroAcc"] is not None
-    ]
+    # cross-validation summary (pure Python, no NumPy)
+    valid_folds = [fs for fs in fold_summaries if fs["test_macroAcc"] is not None]
     if valid_folds:
-        mean_macroAcc = float(
-            np.mean([fs["test_macroAcc"] for fs in valid_folds])
+        mean_macroAcc = sum(fs["test_macroAcc"] for fs in valid_folds) / len(
+            valid_folds
         )
-        mean_macroF1 = float(
-            np.mean([fs["test_macroF1"] for fs in valid_folds])
+        mean_macroF1 = sum(fs["test_macroF1"] for fs in valid_folds) / len(
+            valid_folds
         )
     else:
         mean_macroAcc = None
@@ -446,6 +470,7 @@ def main():
         "mean_test_macroAcc": mean_macroAcc,
         "mean_test_macroF1": mean_macroF1,
     }
+    cv_out = Path("runs") / "cv_summary.json"
     cv_out.write_text(json.dumps(cv_summary, indent=2))
 
     print("\n===== Cross-validation summary =====")
