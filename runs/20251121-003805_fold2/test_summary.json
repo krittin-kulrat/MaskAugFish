@@ -1,0 +1,7 @@
+{
+  "fold_id": 2,
+  "test_macroAcc": 0.7112766682846774,
+  "test_macroF1": 0.2413694818126617,
+  "num_classes": 23,
+  "num_test_samples": 5474
+}
