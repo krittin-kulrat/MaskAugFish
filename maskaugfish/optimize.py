@@ -1,4 +1,8 @@
 import optuna
+import torch
+from augmentation import Augmentation
+from dataloader import make_dataloaders
+from training import train_model
 
 Z = 1.96  # 95% confidence interval
 n = 5  # folds
@@ -48,19 +52,42 @@ def build_cfg(selected_augs, trial):
     return cfg
 
 
-def eval_with_added_aug(additional_aug, prev_augs):
+def eval_with_added_aug(additional_aug, prev_augs,
+                        samples, # For generating dataloaders
+                        model, # Original model with pre-trained weights
+                        input_size, # Input size for the model
+                        ):
+
     T = 20
 
     def objective(trial):
         selected_augs = prev_augs + [additional_aug]
-        # cfg = build_cfg(selected_augs, trial)
-        # pipeline = Augmentation(cfg)
-        # Here you would integrate with your training and evaluation pipeline.
-        # For demonstration purposes, we'll return a mock accuracy value.
-        x = len(selected_augs)
-        mock_accuracy = trial.suggest_float("mock_accuracy", x, x+1)
-        mock_std = trial.suggest_float("mock_std", 0.0, 1.0)
-        return mock_accuracy - Z * (mock_std / (n ** 0.5))
-    study = optuna.create_study(direction="minimize")
-    study.optimize(objective, n_trials=T * (len(prev_augs) + 1))
+        cfg = build_cfg(selected_augs, trial)
+        pipeline = Augmentation(cfg)
+        other_metrics = dict()
+        acc = torch.zeros(n)
+        for i in range(5):
+            train_loader, val_loader, _ = make_dataloaders(
+                samples=samples,
+                batch_size=512,
+                num_workers=4,
+                img_size=input_size,
+                weighted_train=True,
+                seed=42,
+                test_ratio=0.2,
+                n_splits=5,
+                fold_id=i,
+                augment_pipeline=pipeline
+            )
+            best_info, _ =  train_model() # TODO: pass relevant arguments
+            acc[i] = best_info["val_macroAcc"]
+            for key, value in best_info.items():
+                if key != "val_macroAcc":
+                    if key not in other_metrics:
+                        other_metrics[key] = []
+                    other_metrics[key].append(value)
+        return acc.mean().item() - Z * (acc.std().item() / (n ** 0.5))
+    pipeline_length = len(prev_augs) + 1
+    study = optuna.create_study(direction="maximize",study_name=f"eval_{pipeline_length}")
+    study.optimize(objective, n_trials=T * pipeline_length)
     return study.best_params, study.best_value

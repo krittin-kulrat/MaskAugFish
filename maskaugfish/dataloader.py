@@ -190,7 +190,7 @@ class FishDataset(Dataset):
         self.tf_mask = make_mask_tf(img_size)
 
         # cache labels for sampler / sanity checks
-        self.y = np.array([lbl for _, _, lbl in samples], dtype=np.int64)
+        self.y = torch.tensor([lbl for _, _, lbl in samples], dtype=torch.int8)
 
     def __len__(self) -> int:
         return len(self.samples)
