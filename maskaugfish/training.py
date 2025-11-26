@@ -15,14 +15,16 @@ from torchmetrics.classification import (
 
 
 def load_model(backbone, num_classes, device):
-    if backbone.lower not in models.list_models():
+    if backbone.lower() not in models.list_models():
         raise ValueError(f"""Backbone '{backbone}' is not supported by torch vision,
                          see https://pytorch.org/vision/stable/models.html.""")
-    model = models.__dict__[backbone](weights=models.__dict__[f"{backbone}_Weights"].DEFAULT)
+    # Might need to change this later to support more backbones
+    model = models.__dict__[backbone](weights=models.get_model_weights(backbone).DEFAULT)
     if 'resnet' in backbone.lower():
         model.fc = torch.nn.Linear(model.fc.in_features, num_classes)
         input_size = 224
     elif 'efficientnet_b2' in backbone.lower():
+
         model.classifier[1] = torch.nn.Linear(model.classifier[1].in_features, num_classes)
         input_size = 288
     # Add more backbones as needed
@@ -95,16 +97,18 @@ def train_model(
     train_loader,
     val_loader,
     device: torch.device,
-    *,
     num_classes: int,
     epochs: int,
-    criterion: nn.Module,
     opt_name: str = "sgd",
     lr: float = 1e-3,
     patience: int = 5,
     save_model: bool = False,
 ):
-
+    train_criterion = nn.CrossEntropyLoss()  # unweighted loss for training
+    class_counts = val_loader.dataset.y.bincount().to(dtype=torch.float32, device=device)
+    inv = 1.0 / torch.clamp(class_counts, min=1.0)
+    weights = (inv / inv.sum() * num_classes).clamp(max=50.0) # Clamp similar to ramdomsampling
+    val_criterion = nn.CrossEntropyLoss(weight=weights) # weighted loss for validation
     # optimizer + scheduler
     if opt_name == "sgd":
         optimizer = optim.SGD(
@@ -137,7 +141,7 @@ def train_model(
 
             optimizer.zero_grad()
             logits = model(x)
-            loss = criterion(logits, y)
+            loss = train_criterion(logits, y)
             loss.backward()
             optimizer.step()
 
@@ -158,7 +162,7 @@ def train_model(
                 y = batch["label"].to(device)
 
                 logits = model(x)
-                loss = criterion(logits, y)
+                loss = val_criterion(logits, y)
                 val_loss += loss.item() * x.size(0)
 
                 preds = torch.argmax(logits, dim=1)
