@@ -1,45 +1,91 @@
-from maskaugfish.optimize import eval_with_added_aug
+from maskaugfish.optimize import eval_with_added_aug, save_model
+from maskaugfish.dataloader import build_index
+from maskaugfish.training import load_model
+import torch
+import numpy as np
+import random
 
+def main():
+    torch.manual_seed(42)
+    np.random.seed(42)
+    random.seed(42)
+    aug_list = [
+        "channel_switch",
+        "addition",
+        "guassian_noise",
+        # "dropout",
+        # "gaussian_blur",
+        # "solarize",
+        # "equalize"
+    ]
+    data_path = "./data"
+    samples, class_to_id = build_index(data_path)
+    model_name = "resnet18"
+    model, input_size = load_model(model_name, len(class_to_id),
+                                device=torch.device("cuda" if torch.cuda.is_available() else "cpu"))
+    best_study = None
+    current_augs = []
+    for step in range(2):
+        best_step_study = None
+        for i in range(len(aug_list)):
+            if aug_list[i] in current_augs:
+                continue
+            print(f"Evaluating addition of augmentation: {aug_list[i]}")
+            study = eval_with_added_aug(aug_list[i], current_augs,
+                                        samples,
+                                        model,
+                                        input_size)
+            if best_step_study is None:
+                best_step_study = study
+                best_added_aug = aug_list[i]
+            if study.best_value > best_step_study.best_value:
+                best_step_study = study
+                best_added_aug = aug_list[i]
+            if step == 0:
+                save_model(
+                    study.best_trial,
+                    [aug_list[i]],
+                    samples,
+                    model,
+                    input_size,
+                    fname_prefix=f"best_model_{aug_list[i]}",
+                    model_save_path="models"
+                )
 
-aug_list = [
-    "channel_switch",
-    "addition",
-    "guassian_noise",
-    "dropout",
-    "gaussian_blur",
-    "solarize",
-    "equalize"
-]
+        save_model(
+            best_step_study.best_trial,
+            current_augs + [best_added_aug],
+            samples,
+            model,
+            input_size,
+            fname_prefix=f"best_model_step_{step+1}",
+            model_save_path="models"
+        )
+        if best_step_study.best_value > best_study.best_value:
+            best_study = best_step_study
+            current_augs.append(best_added_aug)
+            print(f"Added augmentation: {best_added_aug} with score: {best_step_study.best_value}")
+            print(f"Current augmentations: {current_augs}")
+            print(f"Best parameters so far: {best_study.best_params}")
+        else:
+            print("No further improvement, stopping augmentation addition.")
+            break
 
-best_score = 0.0
-best_params = None
-current_augs = []
-for step in range(len(aug_list)):
-    best_step_score = 0.0
-    best_step_params = None
-    best_added_aug = None
-    for i in range(len(aug_list)):
-        if aug_list[i] in current_augs:
-            continue
-        print(f"Evaluating addition of augmentation: {aug_list[i]}")
-        params, score = eval_with_added_aug(aug_list[i], current_augs)
-        if score > best_step_score:
-            best_step_score = score
-            best_step_params = params
-            best_added_aug = aug_list[i]
+    print("Optimization completed.")
+    print(f"Final augmentations: {current_augs}")
+    print(f"Best parameters: {best_study.best_params}")
+    print(f"Best score: {best_study.best_value}")
+    save_model(
+        best_study.best_trial,
+        current_augs,
+        samples,
+        model,
+        input_size,
+        fname_prefix="best_model_final",
+        model_save_path="models"
+    )
 
-    if best_step_score > best_score:
-        best_score = best_step_score
-        best_params = best_step_params
-        current_augs.append(best_added_aug)
-        print(f"Added augmentation: {best_added_aug} with score: {best_step_score}")
-        print(f"Current augmentations: {current_augs}")
-        print(f"Best parameters so far: {best_params}")
-    else:
-        print("No further improvement, stopping augmentation addition.")
-        break
-
-print("Optimization completed.")
-print(f"Final augmentations: {current_augs}")
-print(f"Best parameters: {best_params}")
-print(f"Best score: {best_score}")
+if __name__ == "__main__":
+    import multiprocessing as mp
+    mp.freeze_support()
+    main()
