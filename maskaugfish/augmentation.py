@@ -258,6 +258,7 @@ class Augmentation(torch.nn.Module):
     def __init__(self, config_file: Union[str, Dict],
                  regime: str = "whole-image") -> None:
         super().__init__()
+        self.dof = 0 # degree of freedom for t distribution value
         if regime not in ["fish-only", "background-only",
                           "whole-image", "none"]:
             raise ValueError(f"Unknown regime: {regime}")
@@ -281,7 +282,7 @@ class Augmentation(torch.nn.Module):
                 if cs_params['prob'] == 0.0:
                     continue
                 pipeline.append(channel_switch_transform(cs_params['prob']))
-
+                self.dof += 1
             elif name == "addition":
                 add_params = aug_def['addition']
                 if add_params['prob'] == 0.0:
@@ -293,6 +294,7 @@ class Augmentation(torch.nn.Module):
                         range_val=add_params.get('range_val', 25),
                     )
                 )
+                self.dof += 3
 
             elif name == "gaussian_noise":
                 gn_params = aug_def['gaussian_noise']
@@ -305,6 +307,7 @@ class Augmentation(torch.nn.Module):
                         std=gn_params.get('std', 1.0),
                     )
                 )
+                self.dof += 3
 
             elif name == "dropout":
                 do_params = aug_def['dropout']
@@ -316,6 +319,7 @@ class Augmentation(torch.nn.Module):
                         dropout_prob=do_params.get('dropout_prob', 0.1),
                     )
                 )
+                self.dof += 2
 
             elif name == "gaussian_blur":
                 gb_params = aug_def['gaussian_blur']
@@ -328,6 +332,7 @@ class Augmentation(torch.nn.Module):
                         sigma=gb_params.get('sigma', 1.0),
                     )
                 )
+                self.dof += 3
 
             elif name == "solarize":
                 solarize_params = aug_def['solarize']
@@ -339,6 +344,7 @@ class Augmentation(torch.nn.Module):
                         threshold=solarize_params['threshold'],
                     )
                 )
+                self.dof += 2
 
             elif name == "equalize":
                 eq_params = aug_def['equalize']
@@ -347,9 +353,11 @@ class Augmentation(torch.nn.Module):
                 pipeline.append(
                     v2.RandomEqualize(p=eq_params['prob'])
                 )
+                self.dof += 1
 
         if len(pipeline) == 0:
             pipeline.append(v2.Lambda(identity_transform))
+            self.dof = 1
 
         self.transforms = v2.Compose(pipeline)
 

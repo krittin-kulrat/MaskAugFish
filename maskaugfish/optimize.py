@@ -3,8 +3,28 @@ import torch
 from maskaugfish.augmentation import Augmentation
 from maskaugfish.dataloader import make_dataloaders
 from maskaugfish.training import train_model
+import os
 
-Z = 2.132 # 90% confidence interval for t-distribution with df=4
+Z = {1: 63.657,
+     2: 9.925,
+     3: 5.841,
+     4: 4.604,
+     5: 4.032,
+     6: 3.707,
+     7: 3.499,
+     8: 3.355,
+     9: 3.250,
+     10: 3.169,
+     11: 3.106,
+     12: 3.055,
+     13: 3.012,
+     14: 2.977,
+     15: 2.947,
+     16: 2.921,
+     17: 2.898,
+     18: 2.878,
+     19: 2.861,
+     20: 2.845}
 
 
 def build_cfg(selected_augs, trial):
@@ -55,19 +75,20 @@ def eval_with_added_aug(additional_aug, prev_augs,
                         samples, # For generating dataloaders
                         model, # Original model with pre-trained weights
                         input_size, # Input size for the model
+                        regime='whole-image'
                         ):
-    T = 20
+    T = 5
     def objective(trial):
         selected_augs = prev_augs + [additional_aug]
         cfg = build_cfg(selected_augs, trial)
-        pipeline = Augmentation(cfg)
+        pipeline = Augmentation(cfg, regime=regime)
         other_metrics = dict()
         acc = torch.zeros(5)
         for i in range(5):
             train_loader, val_loader, _ = make_dataloaders(
                 samples=samples,
-                batch_size=512,
-                num_workers=0,
+                batch_size=1024,
+                num_workers=3,
                 img_size=input_size,
                 weighted_train=True,
                 seed=42,
@@ -82,10 +103,10 @@ def eval_with_added_aug(additional_aug, prev_augs,
                 val_loader,
                 device=torch.device("cuda" if torch.cuda.is_available() else "cpu"),
                 num_classes=len(train_loader.dataset.y.unique()),
-                epochs=400,
+                epochs=100,
                 opt_name="adamw",
                 lr=1e-3,
-                patience=10,
+                patience=3,
                 save_model=False,
             )
             acc[i] = best_info["val_macroAcc"]
@@ -94,7 +115,7 @@ def eval_with_added_aug(additional_aug, prev_augs,
                     if key not in other_metrics:
                         other_metrics[key] = []
                     other_metrics[key].append(value)
-        return acc.mean().item() - Z * (acc.std().item())
+        return acc.mean().item() - Z[pipeline.dof] * (acc.std().item()) / (5 ** 0.5)
     pipeline_length = len(prev_augs) + 1
     study = optuna.create_study(direction="maximize",study_name=f"eval_{pipeline_length}")
     study.optimize(objective, n_trials=T * pipeline_length, n_jobs=1)
@@ -105,14 +126,18 @@ def save_model(trial, selected_augs,
                model,
                input_size,
                fname_prefix,
-               model_save_path):
+               model_save_path,
+               regime='whole-image'):
     cfg = build_cfg(selected_augs, trial)
-    pipeline = Augmentation(cfg)
+    pipeline = Augmentation(cfg, regime=regime)
     for i in range(5):
+        if os.path.exists(f"{model_save_path}/{fname_prefix}_fold{i}.pth"):
+            print(f"Model for fold {i} already exists. Skipping...")
+            continue
         train_loader, val_loader, _ = make_dataloaders(
             samples=samples,
-            batch_size=512,
-            num_workers=0,
+            batch_size=1024,
+            num_workers=3,
             img_size=input_size,
             weighted_train=True,
             seed=42,
@@ -127,10 +152,10 @@ def save_model(trial, selected_augs,
             val_loader,
             device=torch.device("cuda" if torch.cuda.is_available() else "cpu"),
             num_classes=len(train_loader.dataset.y.unique()),
-            epochs=400,
+            epochs=100,
             opt_name="adamw",
             lr=1e-3,
-            patience=10,
+            patience=3,
             save_model=True)
         torch.save({"weight":best_state,
                     "info":best_info}, f"{model_save_path}/{fname_prefix}_fold{i}.pth")

@@ -9,23 +9,25 @@ def main():
     torch.manual_seed(42)
     np.random.seed(42)
     random.seed(42)
+    torch.cuda.empty_cache()
     aug_list = [
         "channel_switch",
         "addition",
         "guassian_noise",
-        # "dropout",
-        # "gaussian_blur",
-        # "solarize",
-        # "equalize"
+        "dropout",
+        "gaussian_blur",
+        "solarize",
+        "equalize"
     ]
+    regime = 'background-only'  # Options: 'whole-image', 'fish-only', 'background-only'
     data_path = "./data"
     samples, class_to_id = build_index(data_path)
-    model_name = "resnet18"
+    model_name = 'shufflenet_v2_x0_5'
     model, input_size = load_model(model_name, len(class_to_id),
                                 device=torch.device("cuda" if torch.cuda.is_available() else "cpu"))
     best_study = None
     current_augs = []
-    for step in range(2):
+    for step in range(1):
         best_step_study = None
         for i in range(len(aug_list)):
             if aug_list[i] in current_augs:
@@ -34,7 +36,9 @@ def main():
             study = eval_with_added_aug(aug_list[i], current_augs,
                                         samples,
                                         model,
-                                        input_size)
+                                        input_size,
+                                        regime=regime
+                                        )
             if best_step_study is None:
                 best_step_study = study
                 best_added_aug = aug_list[i]
@@ -49,7 +53,8 @@ def main():
                     model,
                     input_size,
                     fname_prefix=f"best_model_{aug_list[i]}",
-                    model_save_path="models"
+                    model_save_path="models_background",
+                    regime=regime
                 )
 
         save_model(
@@ -61,7 +66,10 @@ def main():
             fname_prefix=f"best_model_step_{step+1}",
             model_save_path="models"
         )
-        if best_step_study.best_value > best_study.best_value:
+        if best_study is None:
+            best_study = best_step_study
+            current_augs.append(best_added_aug)
+        elif best_step_study.best_value > best_study.best_value:
             best_study = best_step_study
             current_augs.append(best_added_aug)
             print(f"Added augmentation: {best_added_aug} with score: {best_step_study.best_value}")

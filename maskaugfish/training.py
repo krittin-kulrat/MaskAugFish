@@ -14,22 +14,24 @@ from torchmetrics.classification import (
 )
 
 
-def load_model(backbone, num_classes, device):
+def load_model(backbone, num_classes, device, weights=None):
     if backbone.lower() not in models.list_models():
         raise ValueError(f"""Backbone '{backbone}' is not supported by torch vision,
                          see https://pytorch.org/vision/stable/models.html.""")
     # Might need to change this later to support more backbones
-    model = models.__dict__[backbone](weights=models.get_model_weights(backbone).DEFAULT)
     if 'resnet' in backbone.lower():
+        model = models.__dict__[backbone](weights=weights)
         model.fc = torch.nn.Linear(model.fc.in_features, num_classes)
         input_size = 224
-    elif 'efficientnet_b2' in backbone.lower():
+    elif 'shufflenet_v2_x0_5' in backbone.lower():
 
-        model.classifier[1] = torch.nn.Linear(model.classifier[1].in_features, num_classes)
-        input_size = 288
+        model = models.__dict__[backbone](weights=weights)
+        input_size = 224
+        model.fc = torch.nn.Linear(model.fc.in_features, num_classes)
     # Add more backbones as needed
     else:
         raise ValueError(f"Backbone '{backbone}' is not supported for modification.")
+    model.backbone_name = backbone
     model.to(device)
     return model, input_size
 
@@ -65,8 +67,8 @@ def compute_metrics_torch(
         num_classes: number of classes
     """
 
-    preds = preds.to(torch.int64)
-    gts = gts.to(torch.int64)
+    preds = preds.to(torch.int32)
+    gts = gts.to(torch.int32)
 
     acc_metric = MulticlassAccuracy(
         num_classes=num_classes,
@@ -191,6 +193,7 @@ def train_model(
                 "val_loss": float(val_loss),
                 "val_macroAcc": float(val_macroAcc),
                 "val_macroF1": float(val_macroF1),
+                "backbone": model.backbone_name,
             }
 
         # early stopping
