@@ -1,0 +1,42 @@
+[
+    {
+        "checkpoint": "models_whole\\best_model_equalize_fold0.pth",
+        "macro_accuracy": 0.9030601978302002,
+        "macro_f1": 0.9107600450515747,
+        "macro_auc": 0.9944494962692261,
+        "regime": "whole",
+        "augmentation": "equalize"
+    },
+    {
+        "checkpoint": "models_whole\\best_model_equalize_fold1.pth",
+        "macro_accuracy": 0.8847306370735168,
+        "macro_f1": 0.9016358852386475,
+        "macro_auc": 0.9948556423187256,
+        "regime": "whole",
+        "augmentation": "equalize"
+    },
+    {
+        "checkpoint": "models_whole\\best_model_equalize_fold2.pth",
+        "macro_accuracy": 0.8844685554504395,
+        "macro_f1": 0.8952465057373047,
+        "macro_auc": 0.993476152420044,
+        "regime": "whole",
+        "augmentation": "equalize"
+    },
+    {
+        "checkpoint": "models_whole\\best_model_equalize_fold3.pth",
+        "macro_accuracy": 0.8757228851318359,
+        "macro_f1": 0.8895547389984131,
+        "macro_auc": 0.9966081976890564,
+        "regime": "whole",
+        "augmentation": "equalize"
+    },
+    {
+        "checkpoint": "models_whole\\best_model_equalize_fold4.pth",
+        "macro_accuracy": 0.9008704423904419,
+        "macro_f1": 0.9216607809066772,
+        "macro_auc": 0.9940475225448608,
+        "regime": "whole",
+        "augmentation": "equalize"
+    }
+]

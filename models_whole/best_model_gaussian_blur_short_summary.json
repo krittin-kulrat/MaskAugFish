@@ -1,0 +1,42 @@
+[
+    {
+        "checkpoint": "models_whole\\best_model_gaussian_blur_fold0.pth",
+        "macro_accuracy": 0.8780782222747803,
+        "macro_f1": 0.8965785503387451,
+        "macro_auc": 0.9912969470024109,
+        "regime": "whole",
+        "augmentation": "gaussian_blur"
+    },
+    {
+        "checkpoint": "models_whole\\best_model_gaussian_blur_fold1.pth",
+        "macro_accuracy": 0.8983792066574097,
+        "macro_f1": 0.9143639206886292,
+        "macro_auc": 0.9945167899131775,
+        "regime": "whole",
+        "augmentation": "gaussian_blur"
+    },
+    {
+        "checkpoint": "models_whole\\best_model_gaussian_blur_fold2.pth",
+        "macro_accuracy": 0.8845258951187134,
+        "macro_f1": 0.9028835296630859,
+        "macro_auc": 0.9959765076637268,
+        "regime": "whole",
+        "augmentation": "gaussian_blur"
+    },
+    {
+        "checkpoint": "models_whole\\best_model_gaussian_blur_fold3.pth",
+        "macro_accuracy": 0.8745763897895813,
+        "macro_f1": 0.9016006588935852,
+        "macro_auc": 0.9952065348625183,
+        "regime": "whole",
+        "augmentation": "gaussian_blur"
+    },
+    {
+        "checkpoint": "models_whole\\best_model_gaussian_blur_fold4.pth",
+        "macro_accuracy": 0.8922061324119568,
+        "macro_f1": 0.9166603088378906,
+        "macro_auc": 0.99299156665802,
+        "regime": "whole",
+        "augmentation": "gaussian_blur"
+    }
+]

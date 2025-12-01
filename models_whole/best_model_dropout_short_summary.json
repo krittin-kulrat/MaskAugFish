@@ -1,0 +1,42 @@
+[
+    {
+        "checkpoint": "models_whole\\best_model_dropout_fold0.pth",
+        "macro_accuracy": 0.8630050420761108,
+        "macro_f1": 0.8929088711738586,
+        "macro_auc": 0.9945658445358276,
+        "regime": "whole",
+        "augmentation": "dropout"
+    },
+    {
+        "checkpoint": "models_whole\\best_model_dropout_fold1.pth",
+        "macro_accuracy": 0.8739604353904724,
+        "macro_f1": 0.9002684354782104,
+        "macro_auc": 0.9947904944419861,
+        "regime": "whole",
+        "augmentation": "dropout"
+    },
+    {
+        "checkpoint": "models_whole\\best_model_dropout_fold2.pth",
+        "macro_accuracy": 0.8620323538780212,
+        "macro_f1": 0.8966827988624573,
+        "macro_auc": 0.996350109577179,
+        "regime": "whole",
+        "augmentation": "dropout"
+    },
+    {
+        "checkpoint": "models_whole\\best_model_dropout_fold3.pth",
+        "macro_accuracy": 0.8737097382545471,
+        "macro_f1": 0.9047849774360657,
+        "macro_auc": 0.9955282807350159,
+        "regime": "whole",
+        "augmentation": "dropout"
+    },
+    {
+        "checkpoint": "models_whole\\best_model_dropout_fold4.pth",
+        "macro_accuracy": 0.8858765959739685,
+        "macro_f1": 0.9163920879364014,
+        "macro_auc": 0.9962246417999268,
+        "regime": "whole",
+        "augmentation": "dropout"
+    }
+]
