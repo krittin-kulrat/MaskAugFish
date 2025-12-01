@@ -19,7 +19,7 @@ def main():
         "solarize",
         "equalize"
     ]
-    regime = 'background-only'  # Options: 'whole-image', 'fish-only', 'background-only'
+    regime = 'fish-only'  # Options: 'whole-image', 'fish-only', 'background-only'
     data_path = "./data"
     samples, class_to_id = build_index(data_path)
     model_name = 'shufflenet_v2_x0_5'
@@ -53,7 +53,7 @@ def main():
                     model,
                     input_size,
                     fname_prefix=f"best_model_{aug_list[i]}",
-                    model_save_path="models_background",
+                    model_save_path="models_fish",
                     regime=regime
                 )
 
@@ -64,7 +64,7 @@ def main():
             model,
             input_size,
             fname_prefix=f"best_model_step_{step+1}",
-            model_save_path="models"
+            model_save_path="models_fish"
         )
         if best_study is None:
             best_study = best_step_study
