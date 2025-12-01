@@ -1,0 +1,42 @@
+[
+    {
+        "checkpoint": "models_fish\\best_model_solarize_fold0.pth",
+        "macro_accuracy": 0.8956125974655151,
+        "macro_f1": 0.8938610553741455,
+        "macro_auc": 0.9873959422111511,
+        "regime": "fish",
+        "augmentation": "solarize"
+    },
+    {
+        "checkpoint": "models_fish\\best_model_solarize_fold1.pth",
+        "macro_accuracy": 0.8538228869438171,
+        "macro_f1": 0.8829701542854309,
+        "macro_auc": 0.9907158017158508,
+        "regime": "fish",
+        "augmentation": "solarize"
+    },
+    {
+        "checkpoint": "models_fish\\best_model_solarize_fold2.pth",
+        "macro_accuracy": 0.8728389739990234,
+        "macro_f1": 0.8841435313224792,
+        "macro_auc": 0.9880580902099609,
+        "regime": "fish",
+        "augmentation": "solarize"
+    },
+    {
+        "checkpoint": "models_fish\\best_model_solarize_fold3.pth",
+        "macro_accuracy": 0.8626759648323059,
+        "macro_f1": 0.8756274580955505,
+        "macro_auc": 0.9852669835090637,
+        "regime": "fish",
+        "augmentation": "solarize"
+    },
+    {
+        "checkpoint": "models_fish\\best_model_solarize_fold4.pth",
+        "macro_accuracy": 0.8727802634239197,
+        "macro_f1": 0.8991841673851013,
+        "macro_auc": 0.9877091646194458,
+        "regime": "fish",
+        "augmentation": "solarize"
+    }
+]

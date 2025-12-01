@@ -1,0 +1,42 @@
+[
+    {
+        "checkpoint": "models_fish\\best_model_channel_switch_fold0.pth",
+        "macro_accuracy": 0.80592280626297,
+        "macro_f1": 0.8099104762077332,
+        "macro_auc": 0.9857041835784912,
+        "regime": "fish",
+        "augmentation": "channel_switch"
+    },
+    {
+        "checkpoint": "models_fish\\best_model_channel_switch_fold1.pth",
+        "macro_accuracy": 0.8303336501121521,
+        "macro_f1": 0.8589337468147278,
+        "macro_auc": 0.9846551418304443,
+        "regime": "fish",
+        "augmentation": "channel_switch"
+    },
+    {
+        "checkpoint": "models_fish\\best_model_channel_switch_fold2.pth",
+        "macro_accuracy": 0.8358144760131836,
+        "macro_f1": 0.869297981262207,
+        "macro_auc": 0.9858423471450806,
+        "regime": "fish",
+        "augmentation": "channel_switch"
+    },
+    {
+        "checkpoint": "models_fish\\best_model_channel_switch_fold3.pth",
+        "macro_accuracy": 0.7897285223007202,
+        "macro_f1": 0.8229635953903198,
+        "macro_auc": 0.9896807670593262,
+        "regime": "fish",
+        "augmentation": "channel_switch"
+    },
+    {
+        "checkpoint": "models_fish\\best_model_channel_switch_fold4.pth",
+        "macro_accuracy": 0.8033674955368042,
+        "macro_f1": 0.8271188139915466,
+        "macro_auc": 0.9863629937171936,
+        "regime": "fish",
+        "augmentation": "channel_switch"
+    }
+]

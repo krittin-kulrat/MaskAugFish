@@ -1,0 +1,42 @@
+[
+    {
+        "checkpoint": "models_fish\\best_model_equalize_fold0.pth",
+        "macro_accuracy": 0.8568100333213806,
+        "macro_f1": 0.8911057114601135,
+        "macro_auc": 0.9949386715888977,
+        "regime": "fish",
+        "augmentation": "equalize"
+    },
+    {
+        "checkpoint": "models_fish\\best_model_equalize_fold1.pth",
+        "macro_accuracy": 0.8645817041397095,
+        "macro_f1": 0.8817312121391296,
+        "macro_auc": 0.9950685501098633,
+        "regime": "fish",
+        "augmentation": "equalize"
+    },
+    {
+        "checkpoint": "models_fish\\best_model_equalize_fold2.pth",
+        "macro_accuracy": 0.8968957662582397,
+        "macro_f1": 0.9085503816604614,
+        "macro_auc": 0.9985418319702148,
+        "regime": "fish",
+        "augmentation": "equalize"
+    },
+    {
+        "checkpoint": "models_fish\\best_model_equalize_fold3.pth",
+        "macro_accuracy": 0.8581894636154175,
+        "macro_f1": 0.881478488445282,
+        "macro_auc": 0.9972482323646545,
+        "regime": "fish",
+        "augmentation": "equalize"
+    },
+    {
+        "checkpoint": "models_fish\\best_model_equalize_fold4.pth",
+        "macro_accuracy": 0.8558620810508728,
+        "macro_f1": 0.8637292385101318,
+        "macro_auc": 0.9965370297431946,
+        "regime": "fish",
+        "augmentation": "equalize"
+    }
+]

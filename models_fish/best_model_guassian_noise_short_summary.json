@@ -1,0 +1,42 @@
+[
+    {
+        "checkpoint": "models_fish\\best_model_guassian_noise_fold0.pth",
+        "macro_accuracy": 0.8786768317222595,
+        "macro_f1": 0.9039990901947021,
+        "macro_auc": 0.9948937296867371,
+        "regime": "fish",
+        "augmentation": "guassian_noise"
+    },
+    {
+        "checkpoint": "models_fish\\best_model_guassian_noise_fold1.pth",
+        "macro_accuracy": 0.8635938763618469,
+        "macro_f1": 0.8791710734367371,
+        "macro_auc": 0.9927921295166016,
+        "regime": "fish",
+        "augmentation": "guassian_noise"
+    },
+    {
+        "checkpoint": "models_fish\\best_model_guassian_noise_fold2.pth",
+        "macro_accuracy": 0.8638371229171753,
+        "macro_f1": 0.8839706778526306,
+        "macro_auc": 0.9954397082328796,
+        "regime": "fish",
+        "augmentation": "guassian_noise"
+    },
+    {
+        "checkpoint": "models_fish\\best_model_guassian_noise_fold3.pth",
+        "macro_accuracy": 0.890474259853363,
+        "macro_f1": 0.8987608551979065,
+        "macro_auc": 0.99532151222229,
+        "regime": "fish",
+        "augmentation": "guassian_noise"
+    },
+    {
+        "checkpoint": "models_fish\\best_model_guassian_noise_fold4.pth",
+        "macro_accuracy": 0.8593314290046692,
+        "macro_f1": 0.8742749691009521,
+        "macro_auc": 0.9941291809082031,
+        "regime": "fish",
+        "augmentation": "guassian_noise"
+    }
+]

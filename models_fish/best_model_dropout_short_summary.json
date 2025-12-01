@@ -1,0 +1,42 @@
+[
+    {
+        "checkpoint": "models_fish\\best_model_dropout_fold0.pth",
+        "macro_accuracy": 0.8654996752738953,
+        "macro_f1": 0.9068899750709534,
+        "macro_auc": 0.9932928085327148,
+        "regime": "fish",
+        "augmentation": "dropout"
+    },
+    {
+        "checkpoint": "models_fish\\best_model_dropout_fold1.pth",
+        "macro_accuracy": 0.8576173186302185,
+        "macro_f1": 0.8941078186035156,
+        "macro_auc": 0.9926357269287109,
+        "regime": "fish",
+        "augmentation": "dropout"
+    },
+    {
+        "checkpoint": "models_fish\\best_model_dropout_fold2.pth",
+        "macro_accuracy": 0.8729544878005981,
+        "macro_f1": 0.9018128514289856,
+        "macro_auc": 0.9884738326072693,
+        "regime": "fish",
+        "augmentation": "dropout"
+    },
+    {
+        "checkpoint": "models_fish\\best_model_dropout_fold3.pth",
+        "macro_accuracy": 0.8711115717887878,
+        "macro_f1": 0.9012765884399414,
+        "macro_auc": 0.993380606174469,
+        "regime": "fish",
+        "augmentation": "dropout"
+    },
+    {
+        "checkpoint": "models_fish\\best_model_dropout_fold4.pth",
+        "macro_accuracy": 0.870893120765686,
+        "macro_f1": 0.8999817967414856,
+        "macro_auc": 0.9917169809341431,
+        "regime": "fish",
+        "augmentation": "dropout"
+    }
+]

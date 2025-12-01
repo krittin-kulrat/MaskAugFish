@@ -1,0 +1,42 @@
+[
+    {
+        "checkpoint": "models_fish\\best_model_addition_fold0.pth",
+        "macro_accuracy": 0.8471876382827759,
+        "macro_f1": 0.8811877965927124,
+        "macro_auc": 0.9935279488563538,
+        "regime": "fish",
+        "augmentation": "addition"
+    },
+    {
+        "checkpoint": "models_fish\\best_model_addition_fold1.pth",
+        "macro_accuracy": 0.8489715456962585,
+        "macro_f1": 0.8786120414733887,
+        "macro_auc": 0.987859845161438,
+        "regime": "fish",
+        "augmentation": "addition"
+    },
+    {
+        "checkpoint": "models_fish\\best_model_addition_fold2.pth",
+        "macro_accuracy": 0.8634598255157471,
+        "macro_f1": 0.8678444027900696,
+        "macro_auc": 0.9906827211380005,
+        "regime": "fish",
+        "augmentation": "addition"
+    },
+    {
+        "checkpoint": "models_fish\\best_model_addition_fold3.pth",
+        "macro_accuracy": 0.8653719425201416,
+        "macro_f1": 0.8739627599716187,
+        "macro_auc": 0.9903804063796997,
+        "regime": "fish",
+        "augmentation": "addition"
+    },
+    {
+        "checkpoint": "models_fish\\best_model_addition_fold4.pth",
+        "macro_accuracy": 0.8158629536628723,
+        "macro_f1": 0.8264793157577515,
+        "macro_auc": 0.9869730472564697,
+        "regime": "fish",
+        "augmentation": "addition"
+    }
+]
