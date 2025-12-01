@@ -1,0 +1,42 @@
+[
+    {
+        "checkpoint": "models_background\\best_model_gaussian_blur_fold0.pth",
+        "macro_accuracy": 0.8521381616592407,
+        "macro_f1": 0.8919849395751953,
+        "macro_auc": 0.9949880242347717,
+        "regime": "background",
+        "augmentation": "gaussian_blur"
+    },
+    {
+        "checkpoint": "models_background\\best_model_gaussian_blur_fold1.pth",
+        "macro_accuracy": 0.8460731506347656,
+        "macro_f1": 0.8909261226654053,
+        "macro_auc": 0.9958013892173767,
+        "regime": "background",
+        "augmentation": "gaussian_blur"
+    },
+    {
+        "checkpoint": "models_background\\best_model_gaussian_blur_fold2.pth",
+        "macro_accuracy": 0.871320366859436,
+        "macro_f1": 0.9032458066940308,
+        "macro_auc": 0.997584879398346,
+        "regime": "background",
+        "augmentation": "gaussian_blur"
+    },
+    {
+        "checkpoint": "models_background\\best_model_gaussian_blur_fold3.pth",
+        "macro_accuracy": 0.8536341786384583,
+        "macro_f1": 0.894981324672699,
+        "macro_auc": 0.9962797164916992,
+        "regime": "background",
+        "augmentation": "gaussian_blur"
+    },
+    {
+        "checkpoint": "models_background\\best_model_gaussian_blur_fold4.pth",
+        "macro_accuracy": 0.8650962114334106,
+        "macro_f1": 0.9040027856826782,
+        "macro_auc": 0.9948622584342957,
+        "regime": "background",
+        "augmentation": "gaussian_blur"
+    }
+]

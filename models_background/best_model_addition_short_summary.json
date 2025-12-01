@@ -1,0 +1,42 @@
+[
+    {
+        "checkpoint": "models_background\\best_model_addition_fold0.pth",
+        "macro_accuracy": 0.8606939315795898,
+        "macro_f1": 0.8952233195304871,
+        "macro_auc": 0.9976683855056763,
+        "regime": "background",
+        "augmentation": "addition"
+    },
+    {
+        "checkpoint": "models_background\\best_model_addition_fold1.pth",
+        "macro_accuracy": 0.8595781922340393,
+        "macro_f1": 0.8979976773262024,
+        "macro_auc": 0.9977195858955383,
+        "regime": "background",
+        "augmentation": "addition"
+    },
+    {
+        "checkpoint": "models_background\\best_model_addition_fold2.pth",
+        "macro_accuracy": 0.8591976165771484,
+        "macro_f1": 0.8948280811309814,
+        "macro_auc": 0.9979798793792725,
+        "regime": "background",
+        "augmentation": "addition"
+    },
+    {
+        "checkpoint": "models_background\\best_model_addition_fold3.pth",
+        "macro_accuracy": 0.8498673439025879,
+        "macro_f1": 0.867455780506134,
+        "macro_auc": 0.9948303699493408,
+        "regime": "background",
+        "augmentation": "addition"
+    },
+    {
+        "checkpoint": "models_background\\best_model_addition_fold4.pth",
+        "macro_accuracy": 0.851105809211731,
+        "macro_f1": 0.8701342940330505,
+        "macro_auc": 0.9959784746170044,
+        "regime": "background",
+        "augmentation": "addition"
+    }
+]

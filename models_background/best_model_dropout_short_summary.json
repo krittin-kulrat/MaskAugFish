@@ -1,0 +1,42 @@
+[
+    {
+        "checkpoint": "models_background\\best_model_dropout_fold0.pth",
+        "macro_accuracy": 0.8475198149681091,
+        "macro_f1": 0.8874313831329346,
+        "macro_auc": 0.9960051774978638,
+        "regime": "background",
+        "augmentation": "dropout"
+    },
+    {
+        "checkpoint": "models_background\\best_model_dropout_fold1.pth",
+        "macro_accuracy": 0.8513584136962891,
+        "macro_f1": 0.8862900733947754,
+        "macro_auc": 0.9966466426849365,
+        "regime": "background",
+        "augmentation": "dropout"
+    },
+    {
+        "checkpoint": "models_background\\best_model_dropout_fold2.pth",
+        "macro_accuracy": 0.8804055452346802,
+        "macro_f1": 0.905213475227356,
+        "macro_auc": 0.9980757236480713,
+        "regime": "background",
+        "augmentation": "dropout"
+    },
+    {
+        "checkpoint": "models_background\\best_model_dropout_fold3.pth",
+        "macro_accuracy": 0.8541622161865234,
+        "macro_f1": 0.8915397524833679,
+        "macro_auc": 0.9970571994781494,
+        "regime": "background",
+        "augmentation": "dropout"
+    },
+    {
+        "checkpoint": "models_background\\best_model_dropout_fold4.pth",
+        "macro_accuracy": 0.8662251234054565,
+        "macro_f1": 0.8963369727134705,
+        "macro_auc": 0.9972809553146362,
+        "regime": "background",
+        "augmentation": "dropout"
+    }
+]
